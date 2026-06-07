@@ -159,9 +159,12 @@ export default function Contact() {
                 </div>
                 <div className="bg-warm-gray rounded-2xl p-6 md:p-8">
                   <h3 className="font-display font-bold text-xl text-dark mb-3">Based in Sydney</h3>
-                  <p className="text-muted text-sm leading-relaxed">
+                  <p className="text-muted text-sm leading-relaxed mb-3">
                     Available for in-person sessions across Sydney's North Shore. Remote sessions available everywhere else.
                   </p>
+                  <a href="mailto:olliescholefield@gmail.com" className="text-sm font-semibold text-accent hover:text-accent-dark transition-colors">
+                    olliescholefield@gmail.com
+                  </a>
                 </div>
               </FadeIn>
             </div>

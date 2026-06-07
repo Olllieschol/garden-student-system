@@ -102,13 +102,15 @@ export default function Home() {
                   I help businesses save time with AI and teach individuals how to use it — practically, without the hype.
                 </p>
                 <div className="flex flex-wrap gap-3">
-                  <Link
-                    to="/contact"
+                  <a
+                    href="https://calendly.com/olliescholefield/30min"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 bg-dark text-white font-semibold text-sm px-6 py-3.5 rounded-full hover:bg-accent transition-colors"
                   >
                     Book a Free Audit
                     <ArrowRight className="w-4 h-4" />
-                  </Link>
+                  </a>
                   <Link
                     to="/client-stories"
                     className="inline-flex items-center gap-2 border border-warm-border text-dark font-medium text-sm px-6 py-3.5 rounded-full hover:border-dark transition-colors"

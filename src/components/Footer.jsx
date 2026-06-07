@@ -9,6 +9,7 @@ export default function Footer() {
           <div>
             <p className="font-display font-extrabold text-xl text-white">Ollie Scholefield</p>
             <p className="text-white/50 text-sm mt-1">North Shore, Sydney</p>
+            <a href="mailto:olliescholefield@gmail.com" className="text-white/50 text-sm mt-1 hover:text-white transition-colors block">olliescholefield@gmail.com</a>
           </div>
 
           {/* Links */}
@@ -21,7 +22,7 @@ export default function Footer() {
             <div className="flex flex-col gap-3">
               <Link to="/client-stories" className="text-sm text-white/50 hover:text-white transition-colors">Client Stories</Link>
               <Link to="/contact" className="text-sm text-white/50 hover:text-white transition-colors">Contact</Link>
-              <Link to="/contact" className="text-sm text-accent font-semibold hover:text-accent-dark transition-colors">Book a Free Audit</Link>
+              <a href="https://calendly.com/olliescholefield/30min" target="_blank" rel="noopener noreferrer" className="text-sm text-accent font-semibold hover:text-accent-dark transition-colors">Book a Free Audit</a>
               <a href="#" className="text-sm text-white/50 hover:text-white transition-colors">LinkedIn</a>
             </div>
           </div>

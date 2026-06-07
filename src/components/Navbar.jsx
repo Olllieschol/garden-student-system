@@ -36,23 +36,26 @@ export default function Navbar() {
               {label}
             </Link>
           ))}
-          <Link
-            to="/contact"
+          <a
+            href="https://calendly.com/olliescholefield/30min"
+            target="_blank"
+            rel="noopener noreferrer"
             className="ml-1 bg-dark text-white font-semibold text-sm px-5 py-2.5 rounded-full hover:bg-accent transition-colors"
           >
             Book a Free Audit
-          </Link>
+          </a>
         </div>
 
         {/* Mobile */}
         <div className="flex md:hidden items-center gap-3">
-          <Link
-            to="/contact"
+          <a
+            href="https://calendly.com/olliescholefield/30min"
+            target="_blank"
+            rel="noopener noreferrer"
             className="bg-dark text-white font-semibold text-xs px-4 py-2 rounded-full hover:bg-accent transition-colors"
-            onClick={() => setOpen(false)}
           >
             Free Audit
-          </Link>
+          </a>
           <button
             onClick={() => setOpen(!open)}
             className="p-2 -mr-2 text-dark"
@@ -86,13 +89,15 @@ export default function Navbar() {
                   {label}
                 </Link>
               ))}
-              <Link
-                to="/contact"
+              <a
+                href="https://calendly.com/olliescholefield/30min"
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
                 className="mt-2 bg-dark text-white font-semibold text-center text-base px-6 py-3.5 rounded-full hover:bg-accent transition-colors"
               >
                 Book a Free Audit
-              </Link>
+              </a>
             </div>
           </motion.div>
         )}

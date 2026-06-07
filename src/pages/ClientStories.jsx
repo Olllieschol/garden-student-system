@@ -94,13 +94,15 @@ export default function ClientStories() {
             <p className="text-muted text-base md:text-lg mb-8 max-w-md mx-auto">
               Every project starts with a free conversation. No commitment, no pressure — just an honest chat about what's possible.
             </p>
-            <Link
-              to="/contact"
+            <a
+              href="https://calendly.com/olliescholefield/30min"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-dark text-white font-semibold text-base px-8 py-4 rounded-full hover:bg-accent transition-colors"
             >
               Book a Free Audit
               <ArrowRight className="w-4 h-4" />
-            </Link>
+            </a>
           </FadeIn>
         </div>
       </section>

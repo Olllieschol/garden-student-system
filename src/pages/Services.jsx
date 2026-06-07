@@ -137,13 +137,15 @@ export default function Services() {
             <p className="text-muted text-base md:text-lg mb-8 max-w-md mx-auto">
               That's completely fine. Book a free chat and we'll figure it out together.
             </p>
-            <Link
-              to="/contact"
+            <a
+              href="https://calendly.com/olliescholefield/30min"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-2 bg-dark text-white font-semibold text-base px-8 py-4 rounded-full hover:bg-accent transition-colors"
             >
               Book a Free Audit
               <ArrowRight className="w-4 h-4" />
-            </Link>
+            </a>
           </FadeIn>
         </div>
       </section>
