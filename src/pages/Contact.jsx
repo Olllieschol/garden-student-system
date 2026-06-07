@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import FadeIn from '../components/FadeIn'
 
 const options = [
@@ -8,6 +8,26 @@ const options = [
   'Just Curious',
   'Other',
 ]
+
+function CalendlyEmbed() {
+  useEffect(() => {
+    const script = document.createElement('script')
+    script.src = 'https://assets.calendly.com/assets/external/widget.js'
+    script.async = true
+    document.body.appendChild(script)
+    return () => {
+      document.body.removeChild(script)
+    }
+  }, [])
+
+  return (
+    <div
+      className="calendly-inline-widget rounded-xl overflow-hidden"
+      data-url="https://calendly.com/olliescholefield/30min"
+      style={{ minWidth: '280px', height: '660px' }}
+    />
+  )
+}
 
 export default function Contact() {
   const [form, setForm] = useState({
@@ -153,14 +173,7 @@ export default function Contact() {
                   <p className="text-muted text-sm leading-relaxed mb-4">
                     Pick a time that works for you and we'll have a relaxed chat about your business.
                   </p>
-                  <iframe
-                    src="https://calendly.com/olliescholefield/30min?embed_domain=true&embed_type=Inline&hide_landing_page_details=1&hide_gdpr_banner=1"
-                    width="100%"
-                    height="600"
-                    frameBorder="0"
-                    title="Book a time with Ollie"
-                    className="rounded-xl"
-                  />
+                  <CalendlyEmbed />
                 </div>
                 <div className="bg-warm-gray rounded-2xl p-6 md:p-8">
                   <h3 className="font-display font-bold text-xl text-dark mb-3">Based in Sydney</h3>
