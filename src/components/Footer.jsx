@@ -25,7 +25,7 @@ export default function Footer() {
               <Link to="/contact" className="text-sm text-white/50 hover:text-white transition-colors">Contact</Link>
               <a href="https://calendly.com/olliescholefield/30min" target="_blank" rel="noopener noreferrer" className="text-sm text-accent font-semibold hover:text-accent-dark transition-colors">Book a Free Audit</a>
               <a href="https://www.linkedin.com/in/ollie-scholefield-28a065325/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:inline;verticalAlign:middle;marginRight:6px"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>LinkedIn
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>LinkedIn
               </a>
             </div>
           </div>
