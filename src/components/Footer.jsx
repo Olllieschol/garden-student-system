@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Linkedin } from 'lucide-react'
 
 export default function Footer() {
   return (
@@ -23,7 +24,9 @@ export default function Footer() {
               <Link to="/client-stories" className="text-sm text-white/50 hover:text-white transition-colors">Client Stories</Link>
               <Link to="/contact" className="text-sm text-white/50 hover:text-white transition-colors">Contact</Link>
               <a href="https://calendly.com/olliescholefield/30min" target="_blank" rel="noopener noreferrer" className="text-sm text-accent font-semibold hover:text-accent-dark transition-colors">Book a Free Audit</a>
-              <a href="#" className="text-sm text-white/50 hover:text-white transition-colors">LinkedIn</a>
+              <a href="https://www.linkedin.com/in/ollie-scholefield-28a065325/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white transition-colors">
+                <Linkedin className="w-4 h-4" /> LinkedIn
+              </a>
             </div>
           </div>
         </div>

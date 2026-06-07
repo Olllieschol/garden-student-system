@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Linkedin } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 const navLinks = [
@@ -36,6 +36,15 @@ export default function Navbar() {
               {label}
             </Link>
           ))}
+          <a
+            href="https://www.linkedin.com/in/ollie-scholefield-28a065325/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted hover:text-dark transition-colors"
+            aria-label="LinkedIn"
+          >
+            <Linkedin className="w-5 h-5" />
+          </a>
           <a
             href="https://calendly.com/olliescholefield/30min"
             target="_blank"
