@@ -65,8 +65,8 @@ export default function Services() {
   return (
     <>
       {/* Header */}
-      <section className="px-5 md:px-8 pt-12 pb-8 md:pt-20 md:pb-12">
-        <div className="max-w-4xl mx-auto">
+      <section className="px-5 md:px-10 lg:px-20 pt-12 pb-8 md:pt-28 md:pb-16">
+        <div className="max-w-7xl mx-auto">
           <FadeIn>
             <h1 className="font-display font-extrabold text-4xl md:text-6xl text-dark mb-4">
               Services
@@ -83,9 +83,9 @@ export default function Services() {
         <section
           key={service.id}
           id={service.id}
-          className={`px-5 md:px-8 py-14 md:py-20 ${i % 2 === 0 ? '' : 'bg-warm-gray'}`}
+          className={`px-5 md:px-10 lg:px-20 py-14 md:py-36 ${i % 2 === 0 ? '' : 'bg-warm-gray'}`}
         >
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-7xl mx-auto">
             <FadeIn>
               <h2 className="font-display font-extrabold text-3xl md:text-4xl text-dark mb-2">
                 {service.title}
@@ -128,7 +128,7 @@ export default function Services() {
       ))}
 
       {/* Bottom CTA */}
-      <section className="px-5 md:px-8 py-20 md:py-28">
+      <section className="px-5 md:px-10 lg:px-20 py-20 md:py-36">
         <div className="max-w-3xl mx-auto text-center">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark mb-4">

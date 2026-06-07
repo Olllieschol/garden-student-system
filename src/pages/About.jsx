@@ -7,9 +7,9 @@ export default function About() {
   return (
     <>
       {/* Header + Photo */}
-      <section className="px-5 md:px-8 pt-12 pb-16 md:pt-20 md:pb-24">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-start md:gap-16">
+      <section className="px-5 md:px-10 lg:px-20 pt-12 pb-16 md:pt-28 md:pb-32">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-start md:gap-20">
             {/* Photo */}
             <FadeIn className="md:w-5/12 mb-10 md:mb-0">
               <MediaPlaceholder
@@ -65,7 +65,7 @@ export default function About() {
       </section>
 
       {/* CTA */}
-      <section className="px-5 md:px-8 py-20 md:py-28 bg-warm-gray">
+      <section className="px-5 md:px-10 lg:px-20 py-20 md:py-36 bg-warm-gray">
         <div className="max-w-3xl mx-auto text-center">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark mb-4">

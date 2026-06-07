@@ -50,7 +50,7 @@ export default function Contact() {
   return (
     <>
       {/* Header */}
-      <section className="px-5 md:px-8 pt-12 pb-8 md:pt-20 md:pb-12">
+      <section className="px-5 md:px-10 lg:px-20 pt-12 pb-8 md:pt-28 md:pb-16">
         <div className="max-w-3xl mx-auto">
           <FadeIn>
             <h1 className="font-display font-extrabold text-4xl md:text-6xl text-dark mb-4">
@@ -64,9 +64,9 @@ export default function Contact() {
       </section>
 
       {/* Form */}
-      <section className="px-5 md:px-8 pb-16 md:pb-24">
+      <section className="px-5 md:px-10 lg:px-20 pb-16 md:pb-32">
         <div className="max-w-3xl mx-auto">
-          <div className="flex flex-col md:flex-row md:gap-16">
+          <div className="flex flex-col md:flex-row md:gap-20">
             {/* Form column */}
             <div className="md:w-7/12">
               <FadeIn>
@@ -168,14 +168,14 @@ export default function Contact() {
             {/* Sidebar */}
             <div className="md:w-5/12 mt-12 md:mt-0">
               <FadeIn delay={0.1}>
-                <div className="bg-warm-gray rounded-2xl p-6 md:p-8 mb-6">
+                <div className="bg-warm-gray rounded-2xl p-6 md:p-10 mb-6">
                   <h3 className="font-display font-bold text-xl text-dark mb-3">Prefer to book a time directly?</h3>
                   <p className="text-muted text-sm leading-relaxed mb-4">
                     Pick a time that works for you and we'll have a relaxed chat about your business.
                   </p>
                   <CalendlyEmbed />
                 </div>
-                <div className="bg-warm-gray rounded-2xl p-6 md:p-8">
+                <div className="bg-warm-gray rounded-2xl p-6 md:p-10">
                   <h3 className="font-display font-bold text-xl text-dark mb-3">Based in Sydney</h3>
                   <p className="text-muted text-sm leading-relaxed mb-3">
                     Available for in-person sessions across Sydney's North Shore. Remote sessions available everywhere else.

@@ -2295,7 +2295,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Child
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Child's name" value={parsed.childName} onChange={v => updateField('childName', v)} flag={parsed.childName !== parsed.childNameRaw} flagText="capitalisation auto-fixed" />
                   <Field label="Date of birth" value={parsed.dob} onChange={v => updateField('dob', v)} />
                   <ReadOnlyField label="Age" value={ageFromDob(parsed.dob)} hint="calculated from DOB" />
@@ -2309,7 +2309,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Enrolment request
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Arrival to Bali" value={parsed.arrivalDate} onChange={v => updateField('arrivalDate', v)} />
                   <Field label="Intended stay" value={parsed.intendedStay} onChange={v => updateField('intendedStay', v)} />
                   <SelectField label="Class" value={parsed.requestedClass} options={classes.map(c => ({ value: c.id, label: c.name }))} onChange={v => updateField('requestedClass', v)} flag={!!parsed.requestedClassRaw} flagText={`from "${parsed.requestedClassRaw}"`} />
@@ -2322,7 +2322,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Parent 1
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Name" value={parsed.parent1Name} onChange={v => updateField('parent1Name', v)} />
                   <Field label="Email" value={parsed.parent1Email} onChange={v => updateField('parent1Email', v)} />
                   <Field label="Phone" value={parsed.parent1Phone} onChange={v => updateField('parent1Phone', v)} />
@@ -2333,7 +2333,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Parent 2
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Name" value={parsed.parent2Name} onChange={v => updateField('parent2Name', v)} />
                   <Field label="Email" value={parsed.parent2Email} onChange={v => updateField('parent2Email', v)} />
                   <Field label="Phone" value={parsed.parent2Phone} onChange={v => updateField('parent2Phone', v)} />
@@ -2344,7 +2344,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Siblings
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Sibling 1 name" value={parsed.sibling1Name} onChange={v => updateField('sibling1Name', v)} />
                   <Field label="Sibling 1 DOB" value={parsed.sibling1Dob} onChange={v => updateField('sibling1Dob', v)} />
                   <Field label="Sibling 2 name" value={parsed.sibling2Name} onChange={v => updateField('sibling2Name', v)} />
@@ -2357,7 +2357,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Carers
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Pembantu / Nanny name" value={parsed.nannyName} onChange={v => updateField('nannyName', v)} />
                   <Field label="Pembantu / Nanny phone" value={parsed.nannyPhone} onChange={v => updateField('nannyPhone', v)} />
                   <Field label="Family doctor" value={parsed.doctorName} onChange={v => updateField('doctorName', v)} />
@@ -2368,7 +2368,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Medical
                 </div>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-4xl mb-6">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Vaccinations up to date" value={parsed.vaccinationsYesNo} onChange={v => updateField('vaccinationsYesNo', v)} />
                   <Field label="Vaccination details" value={parsed.vaccinationsDetails} onChange={v => updateField('vaccinationsDetails', v)} />
                   <Field label="Has SEN / disabilities" value={parsed.medicalDisabilitiesYesNo} onChange={v => updateField('medicalDisabilitiesYesNo', v)} />
@@ -2384,7 +2384,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
                   Other
                 </div>
-                <div className="max-w-4xl">
+                <div className="max-w-7xl">
                   <Field label="Anything else the parent wants us to know" value={parsed.otherNotes} onChange={v => updateField('otherNotes', v)} />
                 </div>
               </div>

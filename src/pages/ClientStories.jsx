@@ -34,8 +34,8 @@ export default function ClientStories() {
   return (
     <>
       {/* Header */}
-      <section className="px-5 md:px-8 pt-12 pb-8 md:pt-20 md:pb-12">
-        <div className="max-w-5xl mx-auto">
+      <section className="px-5 md:px-10 lg:px-20 pt-12 pb-8 md:pt-28 md:pb-16">
+        <div className="max-w-7xl mx-auto">
           <FadeIn>
             <h1 className="font-display font-extrabold text-4xl md:text-6xl text-dark mb-4">
               Client Stories
@@ -48,11 +48,11 @@ export default function ClientStories() {
       </section>
 
       {/* Stories */}
-      <section className="px-5 md:px-8 pb-16 md:pb-24">
-        <div className="max-w-5xl mx-auto flex flex-col gap-16 md:gap-24">
+      <section className="px-5 md:px-10 lg:px-20 pb-16 md:pb-32">
+        <div className="max-w-7xl mx-auto flex flex-col gap-16 md:gap-24">
           {stories.map((story, i) => (
             <FadeIn key={story.name} delay={i * 0.05}>
-              <article className="flex flex-col md:flex-row md:items-start md:gap-12">
+              <article className="flex flex-col md:flex-row md:items-start md:gap-20">
                 <div className="md:w-1/2 mb-6 md:mb-0">
                   <MediaPlaceholder
                     label={`Client Interview — ${story.name}, ${story.context}`}
@@ -85,7 +85,7 @@ export default function ClientStories() {
       </section>
 
       {/* CTA */}
-      <section className="px-5 md:px-8 py-20 md:py-28 bg-warm-gray">
+      <section className="px-5 md:px-10 lg:px-20 py-20 md:py-36 bg-warm-gray">
         <div className="max-w-3xl mx-auto text-center">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark mb-4">

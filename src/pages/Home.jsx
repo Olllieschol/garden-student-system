@@ -48,9 +48,9 @@ export default function Home() {
   return (
     <>
       {/* ──────── HERO ──────── */}
-      <section className="px-5 md:px-8 pt-8 pb-16 md:pt-14 md:pb-24">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-start md:gap-14">
+      <section className="px-5 md:px-10 lg:px-20 pt-8 pb-16 md:pt-14 md:pb-32">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-start md:gap-20">
 
             {/* ── Collage — top on mobile, right on desktop ── */}
             <div className="order-1 md:order-2 md:w-[48%] mb-10 md:mb-0">
@@ -126,8 +126,8 @@ export default function Home() {
       </section>
 
       {/* ──────── VIDEO SECTION ──────── */}
-      <section className="px-5 md:px-8 py-16 md:py-24 bg-warm-gray">
-        <div className="max-w-5xl mx-auto">
+      <section className="px-5 md:px-10 lg:px-20 py-16 md:py-32 bg-warm-gray">
+        <div className="max-w-7xl mx-auto">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark text-center mb-3">
               See what we've built
@@ -148,8 +148,8 @@ export default function Home() {
       </section>
 
       {/* ──────── SERVICES PREVIEW ──────── */}
-      <section className="px-5 md:px-8 py-16 md:py-24">
-        <div className="max-w-6xl mx-auto">
+      <section className="px-5 md:px-10 lg:px-20 py-16 md:py-32">
+        <div className="max-w-7xl mx-auto">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark mb-3">
               How I can help
@@ -164,7 +164,7 @@ export default function Home() {
               <FadeIn key={service.title} delay={i * 0.08}>
                 <Link
                   to={service.to}
-                  className="group block bg-warm-gray rounded-2xl p-6 md:p-7 border-l-4 border-accent hover:shadow-lg hover:shadow-dark/5 hover:-translate-y-0.5 transition-all duration-200"
+                  className="group block bg-warm-gray rounded-2xl p-6 md:p-10 border-l-4 border-accent hover:shadow-lg hover:shadow-dark/5 hover:-translate-y-0.5 transition-all duration-200"
                 >
                   <h3 className="font-display font-bold text-lg md:text-xl text-dark mb-2">
                     {service.title}
@@ -184,15 +184,15 @@ export default function Home() {
       </section>
 
       {/* ──────── HOW IT WORKS ──────── */}
-      <section className="px-5 md:px-8 py-16 md:py-24 bg-warm-gray">
-        <div className="max-w-4xl mx-auto">
+      <section className="px-5 md:px-10 lg:px-20 py-16 md:py-32 bg-warm-gray">
+        <div className="max-w-7xl mx-auto">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark text-center mb-12 md:mb-16">
               How it works
             </h2>
           </FadeIn>
 
-          <div className="relative flex flex-col gap-10 md:gap-14">
+          <div className="relative flex flex-col gap-10 md:gap-20">
             <div className="absolute left-[1.6rem] md:left-[2rem] top-12 bottom-12 w-px bg-accent/25" />
 
             {steps.map((step, i) => (
@@ -219,7 +219,7 @@ export default function Home() {
       </section>
 
       {/* ──────── FINAL CTA ──────── */}
-      <section className="px-5 md:px-8 py-20 md:py-32">
+      <section className="px-5 md:px-10 lg:px-20 py-20 md:py-32">
         <div className="max-w-3xl mx-auto text-center">
           <FadeIn>
             <h2 className="font-display font-extrabold text-3xl md:text-5xl text-dark mb-4">

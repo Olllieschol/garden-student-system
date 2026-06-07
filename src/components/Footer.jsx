@@ -4,7 +4,7 @@ import { Linkedin } from 'lucide-react'
 export default function Footer() {
   return (
     <footer className="bg-dark text-white">
-      <div className="max-w-6xl mx-auto px-5 md:px-8 py-12 md:py-16">
+      <div className="max-w-7xl mx-auto px-5 md:px-10 lg:px-20 py-12 md:py-24">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
           {/* Left */}
           <div>
