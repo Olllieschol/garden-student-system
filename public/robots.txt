@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ollie-scholefield-website.vercel.app/sitemap.xml
