@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Visual Advisor | Home Audio Visual, Internet and Wi-Fi Specialists</title>
+  <meta name="description" content="Audio Visual Advisor - Home Audio Visual, Internet and Wi-Fi advice and installation specialists. Serving Sydney since 2002.">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --green: #009150;
+      --green-dark: #007a44;
+      --green-light: #e8f5ee;
+      --white: #ffffff;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      color: var(--gray-700);
+      line-height: 1.6;
+      background: var(--white);
+    }
+
+    /* ---- NAV ---- */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background: var(--white);
+      border-bottom: 1px solid var(--gray-200);
+      z-index: 100;
+      padding: 0 1.5rem;
+    }
+    .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--green);
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      text-decoration: none;
+      color: var(--gray-700);
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--green); }
+    .nav-phone {
+      color: var(--green);
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem;
+    }
+    .hamburger span {
+      display: block;
+      width: 24px;
+      height: 2px;
+      background: var(--gray-700);
+      margin: 5px 0;
+      transition: 0.3s;
+    }
+
+    /* ---- HERO ---- */
+    .hero {
+      margin-top: 64px;
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+      color: var(--white);
+      padding: 5rem 1.5rem;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: 2.75rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      letter-spacing: -0.5px;
+    }
+    .hero .tagline {
+      font-size: 1.2rem;
+      font-weight: 300;
+      opacity: 0.92;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+      line-height: 1.5;
+    }
+    .hero-cta {
+      display: inline-block;
+      background: var(--white);
+      color: var(--green);
+      padding: 0.85rem 2.25rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1.05rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .hero-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    /* ---- SECTIONS ---- */
+    section { padding: 5rem 1.5rem; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .section-title {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 0.75rem;
+    }
+    .section-subtitle {
+      text-align: center;
+      color: var(--gray-600);
+      max-width: 600px;
+      margin: 0 auto 3rem;
+      font-size: 1.05rem;
+    }
+
+    /* ---- SERVICES GRID ---- */
+    #services { background: var(--gray-50); }
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.75rem;
+    }
+    .service-card {
+      background: var(--white);
+      border-radius: 10px;
+      padding: 2rem 1.75rem;
+      border: 1px solid var(--gray-200);
+      transition: box-shadow 0.25s, transform 0.25s;
+    }
+    .service-card:hover {
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      transform: translateY(-3px);
+    }
+    .service-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--green-light);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      font-size: 1.5rem;
+    }
+    .service-card h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.6rem;
+    }
+    .service-card p {
+      font-size: 0.95rem;
+      color: var(--gray-600);
+      line-height: 1.55;
+    }
+
+    /* ---- ABOUT ---- */
+    #about { background: var(--white); }
+    .about-content {
+      max-width: 720px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .about-content p {
+      font-size: 1.1rem;
+      color: var(--gray-600);
+      margin-bottom: 1.25rem;
+      line-height: 1.7;
+    }
+    .about-highlight {
+      display: inline-flex;
+      gap: 3rem;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .about-stat {
+      text-align: center;
+    }
+    .about-stat .number {
+      display: block;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .about-stat .label {
+      font-size: 0.9rem;
+      color: var(--gray-600);
+    }
+
+    /* ---- CONTACT ---- */
+    #contact { background: var(--gray-50); }
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .contact-item {
+      text-align: center;
+      padding: 1.5rem;
+    }
+    .contact-item .icon {
+      width: 48px;
+      height: 48px;
+      background: var(--green-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      font-size: 1.3rem;
+    }
+    .contact-item h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin-bottom: 0.4rem;
+    }
+    .contact-item p, .contact-item a {
+      font-size: 0.95rem;
+      color: var(--gray-600);
+    }
+    .contact-item a {
+      color: var(--green);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .contact-item a:hover { text-decoration: underline; }
+
+    /* ---- FOOTER ---- */
+    footer {
+      background: var(--gray-900);
+      color: var(--gray-200);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+    }
+    .footer-logo {
+      font-weight: 700;
+      font-size: 1.15rem;
+      color: var(--white);
+      margin-bottom: 0.5rem;
+    }
+    .footer-phone {
+      color: var(--green);
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 1.1rem;
+    }
+    footer p {
+      font-size: 0.85rem;
+      color: var(--gray-600);
+      margin-top: 1rem;
+    }
+
+    /* ---- SVG ICONS ---- */
+    .icon-svg { width: 24px; height: 24px; fill: none; stroke: var(--green); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ---- MOBILE ---- */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .hamburger { display: block; }
+      .nav-links.open {
+        display: flex;
+        flex-direction: column;
+        position: absolute;
+        top: 64px;
+        left: 0;
+        right: 0;
+        background: var(--white);
+        padding: 1.5rem;
+        gap: 1.25rem;
+        border-bottom: 1px solid var(--gray-200);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      }
+      .hero { padding: 3.5rem 1.5rem; }
+      .hero h1 { font-size: 2rem; }
+      .hero .tagline { font-size: 1.05rem; }
+      .services-grid { grid-template-columns: 1fr; }
+      .contact-grid { grid-template-columns: 1fr; gap: 0.5rem; }
+      section { padding: 3.5rem 1.5rem; }
+      .about-highlight { gap: 2rem; }
+    }
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .services-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">Audio Visual Advisor</a>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="#services">Services</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+      <a href="tel:1300730258" class="nav-phone">1300 730 258</a>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <h1>Audio Visual Advisor</h1>
+    <p class="tagline">Home Audio Visual, Internet and Wi-Fi &ndash; advice and installation specialists</p>
+    <a href="tel:1300730258" class="hero-cta">Call 1300 730 258</a>
+  </section>
+
+  <!-- SERVICES -->
+  <section id="services">
+    <div class="container">
+      <h2 class="section-title">Our Services</h2>
+      <p class="section-subtitle">Professional, friendly service for all your home audio visual and technology needs.</p>
+      <div class="services-grid">
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3>Home Audio Visual Installation</h3>
+          <p>TV, Home Theatre, speakers, or an entire multi-zone Audio Visual system neatly and professionally installed.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+          </div>
+          <h3>Home Internet &amp; Wi-Fi</h3>
+          <p>Internet and Wi-Fi set up to cover your entire home with quality internet.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </div>
+          <h3>Buying Advice</h3>
+          <p>We can help you through the maze of options. TVs, audio systems, Wi-Fi, and computers &ndash; selecting the right one for your needs.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          </div>
+          <h3>System Planning</h3>
+          <p>From home cinemas to multi-room sound, we plan the system that's right for your home.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="13" y2="11"/></svg>
+          </div>
+          <h3>Cabling &amp; Pre-wiring</h3>
+          <p>Antenna, Foxtel, and Internet cabling, planned and installed as you build your new home, during a renovation or retrofit.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <h3>Moving House</h3>
+          <p>We disassemble your systems, then get you up and running in your new home.</p>
+        </div>
+
+        <div class="service-card">
+          <div class="service-icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Technology Tuition</h3>
+          <p>Smart TV, audio systems, iPhone, iPad, Mac and PC tuition &ndash; learn at your own pace.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="about">
+    <div class="container">
+      <h2 class="section-title">About Us</h2>
+      <div class="about-content">
+        <p>Established in 2002, Audio Visual Advisor is a family owned, Australian company, providing a service to simplify the selection, installation, and operation of home audio visual and internet devices.</p>
+        <p>Our service allows our customers to make an informed purchase, from our independent advice, that best suits their needs and maximises their value for money.</p>
+        <div class="about-highlight">
+          <div class="about-stat">
+            <span class="number">20+</span>
+            <span class="label">Years Experience</span>
+          </div>
+          <div class="about-stat">
+            <span class="number">Family</span>
+            <span class="label">Owned &amp; Operated</span>
+          </div>
+          <div class="about-stat">
+            <span class="number">100%</span>
+            <span class="label">Independent Advice</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact">
+    <div class="container">
+      <h2 class="section-title">Get In Touch</h2>
+      <p class="section-subtitle">To book a home visit, give us a call or send an email.</p>
+      <div class="contact-grid">
+        <div class="contact-item">
+          <div class="icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          </div>
+          <h3>Phone</h3>
+          <a href="tel:1300730258">1300 730 258</a>
+        </div>
+        <div class="contact-item">
+          <div class="icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <h3>Email</h3>
+          <a href="mailto:info@audiovisualadvisor.com.au">info@audiovisualadvisor.com.au</a>
+        </div>
+        <div class="contact-item">
+          <div class="icon">
+            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <h3>Mail</h3>
+          <p>PO Box 443, Gordon<br>NSW 2072</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Audio Visual Advisor</div>
+    <a href="tel:1300730258" class="footer-phone">1300 730 258</a>
+    <p>&copy; Audio Visual Advisor Pty Ltd. All rights reserved.</p>
+  </footer>
+
+  <script>
+    document.getElementById('hamburger').addEventListener('click', function() {
+      document.getElementById('navLinks').classList.toggle('open');
+    });
+    document.querySelectorAll('.nav-links a').forEach(function(link) {
+      link.addEventListener('click', function() {
+        document.getElementById('navLinks').classList.remove('open');
+      });
+    });
+  </script>
+</body>
+</html>

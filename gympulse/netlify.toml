@@ -1,0 +1,52 @@
+# ─── Netlify configuration for GymPulse ──────────────────────────────────────
+
+# ─── Build settings ──────────────────────────────────────────────────────────
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA routing — all paths serve index.html
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
+
+# ─── Security headers ────────────────────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Prevent clickjacking
+    X-Frame-Options = "DENY"
+    # Prevent MIME-type sniffing
+    X-Content-Type-Options = "nosniff"
+    # Control referrer information
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # Disable browser features not needed by this app
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    # Force HTTPS
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    # Content Security Policy:
+    # - default: only same origin
+    # - connect-src allows OpenAI (only used when user provides their own API key)
+    # - style-src 'unsafe-inline' required by Tailwind's inline styles
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.openai.com; frame-ancestors 'none';"
+
+# ─── Cache static assets ─────────────────────────────────────────────────────
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ─── NETLIFY SITE PASSWORD PROTECTION ────────────────────────────────────────
+# This cannot be configured here — it must be enabled in the Netlify dashboard:
+#
+#   1. Go to: app.netlify.com → your site → Site configuration
+#   2. Navigate to: Access control → Visitor access
+#   3. Click "Set password" and enter a shared password
+#   4. Save — Netlify will prompt all visitors for this password before loading the site
+#
+# Note: This feature requires a Netlify Pro plan or higher.
+# ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Plus Jakarta Sans", sans-serif;
+  --font-body: "DM Sans", sans-serif;
+
+  --color-warm-white: #EDE8DB;
+  --color-warm-gray: #E5DED0;
+  --color-warm-border: #D4CABC;
+  --color-dark: #141414;
+  --color-muted: #555550;
+  --color-accent: #2D7A4F;
+  --color-accent-dark: #235F3D;
+  --color-accent-light: #2D7A4F18;
+  --color-placeholder: #E0DED7;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-dark);
+  background-color: var(--color-warm-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: white;
+}
