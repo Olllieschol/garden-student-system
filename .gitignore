@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.netlify/
+.claude/
+
+# Other projects in this folder
+ava website/
+ava-website/
+gympulse/
+server.rb
+about-photo.jpg
