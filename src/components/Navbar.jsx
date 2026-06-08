@@ -20,7 +20,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-5 md:px-10 lg:px-20 flex items-center justify-between h-16 md:h-[4.5rem]">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
-          <img src="/logo.svg" alt="Ollie Scholefield" className="h-10 w-10 rounded-full" />
+          <img src="/logo.svg" alt="Ollie Scholefield" className="h-12 w-12 rounded-full flex-shrink-0" />
           <span className="font-display font-extrabold text-lg md:text-xl text-dark tracking-tight">Ollie Scholefield</span>
         </Link>
 
