@@ -18,14 +18,14 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-warm-white/90 backdrop-blur-md border-b border-warm-border">
       <div className="max-w-7xl mx-auto px-5 md:px-10 lg:px-20 flex items-center justify-between h-16 md:h-[4.5rem]">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
-          <img src="/logo.svg" alt="Ollie Scholefield" className="h-12 w-12 rounded-full flex-shrink-0" />
-          <span className="font-display font-extrabold text-lg md:text-xl text-dark tracking-tight">Ollie Scholefield</span>
+        {/* Logo — far left on desktop, part of left group on mobile */}
+        <Link to="/" onClick={() => setOpen(false)} className="flex-shrink-0">
+          <img src="/logo.svg" alt="Ollie Scholefield" className="h-12 w-12 rounded-full" />
         </Link>
 
-        {/* Desktop nav */}
+        {/* Desktop nav — name + links on the right */}
         <div className="hidden md:flex items-center gap-7">
+          <span className="font-display font-extrabold text-lg text-dark tracking-tight mr-4">Ollie Scholefield</span>
           {navLinks.map(({ to, label }) => (
             <Link
               key={to}
