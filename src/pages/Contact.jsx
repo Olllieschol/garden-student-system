@@ -37,14 +37,30 @@ export default function Contact() {
     interest: '',
     message: '',
   })
+  const [status, setStatus] = useState('idle') // idle | submitting | success | error
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    alert('Thanks for reaching out! (This form isn\'t connected yet — just a placeholder.)')
+    setStatus('submitting')
+    try {
+      const res = await fetch('https://formspree.io/f/xvznabpw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (res.ok) {
+        setStatus('success')
+        setForm({ name: '', email: '', phone: '', interest: '', message: '' })
+      } else {
+        setStatus('error')
+      }
+    } catch {
+      setStatus('error')
+    }
   }
 
   return (
@@ -154,11 +170,24 @@ export default function Contact() {
                   </div>
                   <button
                     type="submit"
-                    className="mt-2 bg-dark text-white font-semibold text-base px-8 py-4 rounded-full hover:bg-accent transition-colors w-full sm:w-auto"
+                    disabled={status === 'submitting'}
+                    className="mt-2 bg-dark text-white font-semibold text-base px-8 py-4 rounded-full hover:bg-accent transition-colors w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Send Message
+                    {status === 'submitting' ? 'Sending…' : 'Send Message'}
                   </button>
-                  <p className="text-muted text-sm mt-4 leading-relaxed">
+
+                  {status === 'success' && (
+                    <div className="bg-accent/10 border border-accent/30 rounded-xl px-5 py-4">
+                      <p className="text-accent font-semibold text-sm">Message sent! I'll get back to you within 24 hours.</p>
+                    </div>
+                  )}
+                  {status === 'error' && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4">
+                      <p className="text-red-600 font-semibold text-sm">Something went wrong. Please try again or email me directly at olliescholefield@gmail.com</p>
+                    </div>
+                  )}
+
+                  <p className="text-muted text-sm leading-relaxed">
                     I'll get back to you within 24 hours to lock in a time. The audit takes around 30 minutes and is completely free — no commitment, no pressure.
                   </p>
                 </form>
