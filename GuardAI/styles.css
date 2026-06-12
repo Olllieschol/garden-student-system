@@ -1,0 +1,460 @@
+/* GuardAI — styles.css
+ * Injected into AI chat pages. Styles the non-blocking warning popup that
+ * appears above the input field. All selectors are namespaced with
+ * `.guardai-` to avoid clashing with the host page. High z-index keeps it
+ * above site chrome; pointer-events stay on the popup only, so the page
+ * behind it is never blocked. */
+
+.guardai-warning {
+  position: fixed;
+  z-index: 2147483646; /* just below the max so site modals can't hide it */
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid #2a313c;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  animation: guardai-pop 0.16s ease-out;
+}
+
+@keyframes guardai-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.guardai-warning__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: #1c2230;
+  border-bottom: 1px solid #2a313c;
+}
+.guardai-warning__shield { font-size: 16px; }
+.guardai-warning__title { font-weight: 700; flex: 1; font-size: 13px; }
+.guardai-warning__close {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.guardai-warning__close:hover { color: #e6edf3; }
+
+.guardai-warning__body { padding: 12px 14px; max-height: 280px; overflow-y: auto; }
+
+.guardai-warning__platform {
+  font-size: 12px;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.guardai-warning__list { list-style: none; margin: 0; padding: 0; }
+.guardai-warning__list li {
+  padding: 8px 0;
+  border-bottom: 1px solid #21262d;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+}
+.guardai-warning__list li:last-child { border-bottom: none; }
+.guardai-warning__type { font-weight: 600; color: #58a6ff; }
+.guardai-warning__count {
+  background: #1c2230;
+  border: 1px solid #2a313c;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #8b949e;
+  justify-self: end;
+}
+.guardai-warning__reason {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: #8b949e;
+  margin: 2px 0 0;
+}
+
+.guardai-warning__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #12161d;
+  border-top: 1px solid #2a313c;
+}
+.guardai-btn {
+  flex: 1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #2a313c;
+  background: #1c2230;
+  color: #e6edf3;
+  transition: 0.15s;
+}
+.guardai-btn:hover { filter: brightness(1.15); }
+.guardai-btn--mask { background: #238636; border-color: #2ea043; color: #fff; }
+.guardai-btn--send { background: #1c2230; color: #d29922; border-color: rgba(210,153,34,0.4); }
+.guardai-btn--cancel { background: transparent; color: #8b949e; }
+
+/* ---- Mask confirmation toast (bottom-right) ---- */
+.guardai-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483647;
+  width: 320px;
+  max-width: calc(100vw - 36px);
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid #2a313c;
+  border-left: 3px solid #3fb950;
+  border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12.5px;
+  padding: 12px 14px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.guardai-toast--in { opacity: 1; transform: translateY(0); }
+.guardai-toast--error { border-left-color: #f85149; }
+.guardai-toast__head {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.guardai-toast__shield { font-size: 15px; }
+.guardai-toast__list { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+.guardai-toast__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #1c2230;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.guardai-toast__real {
+  color: #f85149;
+  text-decoration: line-through;
+  opacity: 0.85;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guardai-toast__arrow { color: #8b949e; flex: none; }
+.guardai-toast__fake {
+  color: #3fb950;
+  font-weight: 600;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Unmask (auto-decryption) toast: fake -> real, reverse styling ---- */
+.guardai-toast--unmask { border-left-color: #58a6ff; }
+.guardai-toast--unmask .guardai-toast__fake {
+  color: #f85149;
+  font-weight: 400;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+.guardai-toast--unmask .guardai-toast__real {
+  color: #3fb950;
+  font-weight: 600;
+  text-decoration: none;
+  opacity: 1;
+}
+
+/* ---- Persistent activity panel (right side) ---- */
+.guardai-panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid #2a313c;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  animation: guardai-pop 0.16s ease-out;
+}
+
+.guardai-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: #1c2230;
+  border-bottom: 1px solid #2a313c;
+}
+.guardai-panel__shield { font-size: 16px; }
+.guardai-panel__title { font-weight: 700; flex: 1; font-size: 13px; }
+.guardai-panel__close {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.guardai-panel__close:hover { color: #e6edf3; }
+
+.guardai-panel__sub {
+  padding: 9px 14px;
+  font-size: 11px;
+  color: #8b949e;
+  background: #12161d;
+  border-bottom: 1px solid #21262d;
+}
+
+/* ---- Auto-restore toggle ---- */
+.guardai-panel__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #12161d;
+  border-bottom: 1px solid #21262d;
+}
+.guardai-panel__toggletext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.guardai-panel__togglelabel { font-size: 12.5px; font-weight: 600; color: #e6edf3; }
+.guardai-panel__togglehint { font-size: 10.5px; color: #8b949e; }
+.guardai-panel__switch {
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid #2a313c;
+  background: #30363d;
+  cursor: pointer;
+  transition: background 0.15s;
+  padding: 0;
+}
+.guardai-panel__switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #c9d1d9;
+  transition: transform 0.15s;
+}
+.guardai-panel__switch--on { background: #238636; border-color: #2ea043; }
+.guardai-panel__switch--on::after { transform: translateX(16px); background: #fff; }
+
+.guardai-panel__actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #12161d;
+  border-bottom: 1px solid #21262d;
+}
+.guardai-panel__action {
+  flex: 1;
+  background: #1c2230;
+  color: #c9d1d9;
+  border: 1px solid #2a313c;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.guardai-panel__action:hover { background: #232b3a; border-color: #3a4350; }
+.guardai-panel__action--danger { color: #f85149; border-color: rgba(248, 81, 73, 0.4); }
+.guardai-panel__action--danger:hover { background: rgba(248, 81, 73, 0.12); border-color: rgba(248, 81, 73, 0.7); }
+
+.guardai-panel__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.guardai-panel__empty {
+  color: #8b949e;
+  font-size: 12px;
+  padding: 16px 8px;
+  text-align: center;
+}
+
+.guardai-panel__row {
+  background: #1c2230;
+  border: 1px solid #21262d;
+  border-left: 3px solid #2a313c;
+  border-radius: 8px;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.guardai-panel__row--mask { border-left-color: #3fb950; }
+.guardai-panel__row--unmask { border-left-color: #58a6ff; }
+.guardai-panel__row--pending { border-left-color: #d29922; }
+
+.guardai-panel__rowhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.guardai-panel__tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8b949e;
+}
+.guardai-panel__row--mask .guardai-panel__tag { color: #3fb950; }
+.guardai-panel__row--unmask .guardai-panel__tag { color: #58a6ff; }
+.guardai-panel__row--pending .guardai-panel__tag { color: #d29922; }
+
+.guardai-panel__type {
+  font-size: 10px;
+  color: #6e7681;
+}
+
+.guardai-panel__swap {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+}
+.guardai-panel__from,
+.guardai-panel__to {
+  /* Show the full masked/restored value — never truncate. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.guardai-panel__arrow { color: #8b949e; flex: none; }
+
+/* mask: real (left, normal) -> fake (right, green) */
+.guardai-panel__row--mask .guardai-panel__from { color: #e6edf3; }
+.guardai-panel__row--mask .guardai-panel__to { color: #3fb950; font-weight: 600; }
+/* unmask: fake (left, struck red) -> real (right, green) */
+.guardai-panel__row--unmask .guardai-panel__from {
+  color: #f85149;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+.guardai-panel__row--unmask .guardai-panel__to { color: #3fb950; font-weight: 600; }
+
+/* pending: fake shown as-is (response untouched), real hidden until Reveal */
+.guardai-panel__from--fake { color: #d29922; font-weight: 600; max-width: 100%; }
+.guardai-panel__reveal {
+  margin-top: 2px;
+  align-self: flex-start;
+  background: #1c2230;
+  color: #d29922;
+  border: 1px solid rgba(210, 153, 34, 0.4);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.guardai-panel__reveal:hover { filter: brightness(1.15); }
+
+/* ---- Collapsed reopen badge ---- */
+.guardai-reopen {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1c2230;
+  color: #e6edf3;
+  border: 1px solid #2a313c;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.guardai-reopen:hover { filter: brightness(1.15); }
+.guardai-reopen__shield { font-size: 16px; }
+.guardai-reopen__count {
+  background: #238636;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* ---- Per-message fake/real toggle button ---- */
+.guardai-msgtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  background: #1c2230;
+  color: #8b949e;
+  border: 1px solid #2a313c;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  vertical-align: middle;
+  opacity: 0.65;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.guardai-msgtoggle:hover { opacity: 1; }
+.guardai-msgtoggle::before {
+  content: "\1F441"; /* eye */
+  font-size: 11px;
+}
+.guardai-msgtoggle[data-state="fake"] {
+  color: #d29922;
+  border-color: rgba(210, 153, 34, 0.4);
+}
+.guardai-msgtoggle[data-state="real"] {
+  color: #3fb950;
+  border-color: rgba(63, 185, 80, 0.35);
+}

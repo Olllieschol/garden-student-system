@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GuardAI</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="gd-header">
+      <div class="gd-brand">
+        <span class="gd-logo">&#128737;</span>
+        <div>
+          <h1 class="gd-title">GuardAI</h1>
+          <p class="gd-subtitle">Local AI privacy guard</p>
+        </div>
+      </div>
+      <!-- Master enable/disable -->
+      <label class="gd-switch" title="Enable or disable GuardAI">
+        <input type="checkbox" id="toggle-enabled" />
+        <span class="gd-slider"></span>
+      </label>
+    </header>
+
+    <!-- Privacy score -->
+    <section class="gd-score-card">
+      <div class="gd-score-ring" id="score-ring">
+        <span class="gd-score-value" id="score-value">100</span>
+        <span class="gd-score-label">privacy<br />score</span>
+      </div>
+      <p class="gd-score-hint" id="score-hint">You're protected. Nothing risky sent yet.</p>
+    </section>
+
+    <!-- Masking mode -->
+    <section class="gd-row">
+      <div>
+        <span class="gd-row__title">Masking mode</span>
+        <span class="gd-row__desc">Auto-replace sensitive data with fakes before sending.</span>
+      </div>
+      <label class="gd-switch" title="Enable masking before sending">
+        <input type="checkbox" id="toggle-masking" />
+        <span class="gd-slider"></span>
+      </label>
+    </section>
+
+    <!-- Session stats -->
+    <section class="gd-stats">
+      <div class="gd-stat">
+        <span class="gd-stat__num" id="stat-detected">0</span>
+        <span class="gd-stat__lbl">Detected</span>
+      </div>
+      <div class="gd-stat">
+        <span class="gd-stat__num" id="stat-masked">0</span>
+        <span class="gd-stat__lbl">Masked</span>
+      </div>
+      <div class="gd-stat">
+        <span class="gd-stat__num" id="stat-sent">0</span>
+        <span class="gd-stat__lbl">Sent as-is</span>
+      </div>
+    </section>
+
+    <!-- Platforms used -->
+    <section class="gd-platforms">
+      <h2 class="gd-section-title">Platforms this session</h2>
+      <div id="platform-list" class="gd-platform-list">
+        <span class="gd-empty">No AI platforms used yet.</span>
+      </div>
+    </section>
+
+    <!-- Recent swaps log -->
+    <section class="gd-swaps">
+      <h2 class="gd-section-title">Recent swaps (real &rarr; fake)</h2>
+      <div id="swap-list" class="gd-swap-list">
+        <span class="gd-empty">No data masked yet.</span>
+      </div>
+    </section>
+
+    <!-- Mapping table controls -->
+    <section class="gd-row">
+      <div>
+        <span class="gd-row__title">Local mapping table</span>
+        <span class="gd-row__desc"><span id="map-count">0</span> stored mappings (device only).</span>
+      </div>
+      <button id="clear-map" class="gd-btn gd-btn--danger">Clear</button>
+    </section>
+
+    <footer class="gd-footer">
+      <span class="gd-badge">&#128274; 100% local &middot; zero external calls</span>
+      <a href="#" id="privacy-link" class="gd-link">Privacy policy</a>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
