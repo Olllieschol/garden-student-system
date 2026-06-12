@@ -1113,12 +1113,22 @@
     }
     // Longest "from" first so "Liam Brown" is handled before the "Liam" alias.
     raw.sort((a, b) => b.from.length - a.from.length);
-    return raw.map((r) => ({
-      key: r.key,
-      to: r.to,
-      entry: r.entry,
-      re: new RegExp("(?<![A-Za-z0-9])" + escapeRegExp(r.from) + "(?![A-Za-z0-9])", "g"),
-    }));
+    return raw.map((r) => {
+      // Join the words of a multi-word value (e.g. an address) with a flexible
+      // separator so the AI's reformatting still matches: extra spaces, an
+      // inserted comma ("147 Banksia Street, Melbourne"), or a line break when
+      // the value is wrapped across lines all count as a gap.
+      const tokens = r.from.split(/\s+/).filter(Boolean).map(escapeRegExp);
+      const multi = tokens.length > 1;
+      const body = tokens.join("[\\s,]+");
+      return {
+        key: r.key,
+        to: r.to,
+        entry: r.entry,
+        multi,
+        re: new RegExp("(?<![A-Za-z0-9])" + body + "(?![A-Za-z0-9])", "g"),
+      };
+    });
   }
 
   /** Should this text node be left alone? (our UI, the live input editor). */
@@ -1168,7 +1178,97 @@
       if (value !== original) edits.push([n, value]);
     }
     for (const [node, value] of edits) node.nodeValue = value;
+    // Multi-word values (e.g. addresses) the AI split across separate text nodes
+    // (street on one line, suburb on the next) can't be caught node-by-node, so
+    // run a second pass that matches across node boundaries.
+    const crossed = swapAcrossNodes(rootEl, rules);
+    for (const [k, v] of crossed) swapped.set(k, v);
     return swapped;
+  }
+
+  /**
+   * Replace multi-word values that span more than one text node. We concatenate
+   * the eligible text nodes (joined by a newline that the flexible "[\s,]+"
+   * separators match), find any rule whose match crosses a node boundary, and
+   * rewrite it in place: the full replacement goes into the first node of the
+   * span and the remainder of the matched text is removed from the others.
+   */
+  function swapAcrossNodes(rootEl, rules) {
+    const swapped = new Map();
+    const multi = rules.filter((r) => r.multi);
+    if (!multi.length) return swapped;
+
+    const editor = findEditor();
+    const nodes = [];
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (isProtectedNode(node, editor)) return NodeFilter.FILTER_REJECT;
+        return node.nodeValue && node.nodeValue.trim()
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    });
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    if (nodes.length < 2) return swapped; // need a boundary to span
+
+    let combined = "";
+    const spans = []; // {node, start, end} positions within `combined`
+    for (let i = 0; i < nodes.length; i++) {
+      const start = combined.length;
+      combined += nodes[i].nodeValue;
+      spans.push({ node: nodes[i], start, end: combined.length });
+      if (i < nodes.length - 1) combined += "\n"; // node boundary
+    }
+
+    const edits = []; // {start, end, to, rule}
+    for (const rule of multi) {
+      rule.re.lastIndex = 0;
+      let m;
+      while ((m = rule.re.exec(combined))) {
+        // Only handle matches that actually cross a boundary; within-node
+        // matches were already done by the caller's per-node pass.
+        if (m[0].indexOf("\n") !== -1) {
+          edits.push({ start: m.index, end: m.index + m[0].length, to: rule.to, rule });
+        }
+        if (rule.re.lastIndex === m.index) rule.re.lastIndex++;
+      }
+      rule.re.lastIndex = 0;
+    }
+    if (!edits.length) return swapped;
+
+    // Drop overlapping matches, then apply from last to first so earlier
+    // offsets stay valid as node values change.
+    edits.sort((a, b) => a.start - b.start);
+    const kept = [];
+    let lastEnd = -1;
+    for (const e of edits) {
+      if (e.start >= lastEnd) {
+        kept.push(e);
+        lastEnd = e.end;
+      }
+    }
+    for (let i = kept.length - 1; i >= 0; i--) {
+      const e = kept[i];
+      applyCombinedReplacement(spans, e.start, e.end - e.start, e.to);
+      swapped.set(e.rule.key, e.rule.entry);
+    }
+    return swapped;
+  }
+
+  /** Write `replacement` across the text nodes covered by [start, start+length). */
+  function applyCombinedReplacement(spans, start, length, replacement) {
+    const end = start + length;
+    let placed = false;
+    for (const sp of spans) {
+      if (sp.end <= start || sp.start >= end) continue; // node outside the span
+      const localStart = Math.max(0, start - sp.start);
+      const localEnd = Math.min(sp.node.nodeValue.length, end - sp.start);
+      const before = sp.node.nodeValue.slice(0, localStart);
+      const after = sp.node.nodeValue.slice(localEnd);
+      sp.node.nodeValue = placed ? before + after : before + replacement + after;
+      placed = true;
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -1328,6 +1428,9 @@
     }
     if (state.autoRestore) {
       for (const [node, value] of edits) node.nodeValue = value;
+      // Catch multi-word values (addresses) the AI wrapped across text nodes.
+      const crossed = swapAcrossNodes(root, rules);
+      for (const [k, v] of crossed) swappedEntries.set(k, v);
     }
 
     // With auto-restore OFF, keep any message the user manually flipped to the
