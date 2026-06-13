@@ -849,8 +849,8 @@
       return false; // we typed; nothing to send automatically
     }
 
-    // Warning mode: show the non-blocking popup and wait for a choice.
-    showWarning(editor, text, findings, originalResend);
+    // Review mode: show the full-screen pre-send preview and wait for a choice.
+    showPreSendPreview(editor, text, findings, originalResend);
     return false; // block until user decides
   }
 
@@ -1043,6 +1043,344 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Pre-send review preview.
+   * When sensitive data is detected on send, we show a full-screen overlay that
+   * displays the exact message, highlights every detected item in a per-type
+   * colour, and lets the user mask anything the detector missed by selecting it.
+   * "Send masked" swaps every highlighted item for its fake and sends; "Cancel"
+   * leaves the original message untouched in the editor. Nothing is sent until
+   * the user chooses. Detection, masking and auto-restore are all reused as-is.
+   * ------------------------------------------------------------------ */
+  const PV_STYLE = {
+    NAME_PII: { label: "Name", color: "#58a6ff" },
+    PHONE: { label: "Phone", color: "#f0883e" },
+    EMAIL: { label: "Email", color: "#3fb950" },
+    ADDRESS: { label: "Address", color: "#bc8cff" },
+    DOB: { label: "Date of birth", color: "#e3b341" },
+    PASSPORT: { label: "Passport", color: "#e3b341" },
+    LICENCE: { label: "Licence", color: "#e3b341" },
+    MEDICARE: { label: "Medicare", color: "#e3b341" },
+    TFN: { label: "TFN", color: "#e3b341" },
+    CREDIT_CARD: { label: "Card number", color: "#e3b341" },
+    BSB: { label: "BSB", color: "#e3b341" },
+    BANK_ACCOUNT: { label: "Bank account", color: "#e3b341" },
+    MONEY: { label: "Amount", color: "#e3b341" },
+    GPS: { label: "GPS", color: "#e3b341" },
+    ABN: { label: "ABN", color: "#e3b341" },
+    ACN: { label: "ACN", color: "#e3b341" },
+    PASSWORD: { label: "Password", color: "#f85149" },
+  };
+  const PV_DEFAULT = { label: "Sensitive", color: "#e3b341" };
+  const PV_MANUAL = { label: "Manual", color: "#ff7b9c" };
+
+  let pv = null; // active preview state (null when closed)
+
+  function pvStyle(type, manual) {
+    return PV_STYLE[type] || (manual ? PV_MANUAL : PV_DEFAULT);
+  }
+
+  /** Get (memoised) the proposed fake for a real value so duplicates align. */
+  function pvFakeFor(type, value) {
+    if (pv.fakeByReal.has(value)) return pv.fakeByReal.get(value);
+    const f = masker.previewFake(type, value);
+    pv.fakeByReal.set(value, f);
+    return f;
+  }
+
+  async function showPreSendPreview(editor, original, findings, resend) {
+    if (pv) pvClose();
+    await masker.load();
+
+    pv = {
+      editor,
+      original,
+      resend,
+      items: [],
+      fakeByReal: new Map(),
+      pendingSel: null,
+      popEl: null,
+      onKey: null,
+    };
+
+    // Seed with the maskable auto-detected findings (detector already resolves
+    // overlaps). Warning-only findings can still be masked manually.
+    for (const f of findings) {
+      if (!masker.isMaskable(f.type)) continue;
+      pv.items.push({
+        start: f.index,
+        end: f.index + f.value.length,
+        value: f.value,
+        type: f.type,
+        manual: false,
+        fake: pvFakeFor(f.type, f.value),
+      });
+    }
+    pv.items.sort((a, b) => a.start - b.start);
+
+    const overlay = document.createElement("div");
+    overlay.className = "guardai-pv";
+    overlay.innerHTML =
+      `<div class="guardai-pv__card" role="dialog" aria-label="GuardAI pre-send review">` +
+      `<div class="guardai-pv__head">` +
+      `<span class="guardai-pv__shield">&#128737;</span>` +
+      `<span class="guardai-pv__count"></span>` +
+      `<button class="guardai-pv__x" aria-label="Cancel">&times;</button>` +
+      `</div>` +
+      `<div class="guardai-pv__hint">Review what you're sending to ${escapeHtml(CONFIG.name)}. ` +
+      `Highlighted items are replaced with realistic fakes. Select any missed text to mask it too.</div>` +
+      `<div class="guardai-pv__legend"></div>` +
+      `<div class="guardai-pv__body" tabindex="0"></div>` +
+      `<div class="guardai-pv__foot">` +
+      `<button class="guardai-pv__btn guardai-pv__btn--cancel">Cancel</button>` +
+      `<button class="guardai-pv__btn guardai-pv__btn--send">Send masked</button>` +
+      `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+
+    pv.el = overlay;
+    pv.bodyEl = overlay.querySelector(".guardai-pv__body");
+    pv.countEl = overlay.querySelector(".guardai-pv__count");
+    pv.legendEl = overlay.querySelector(".guardai-pv__legend");
+
+    overlay.querySelector(".guardai-pv__x").onclick = pvCancel;
+    overlay.querySelector(".guardai-pv__btn--cancel").onclick = pvCancel;
+    overlay.querySelector(".guardai-pv__btn--send").onclick = pvSendMasked;
+    pv.bodyEl.addEventListener("mouseup", pvHandleSelection);
+
+    // Escape cancels; keep it scoped to while the overlay is open.
+    pv.onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        pvCancel();
+      }
+    };
+    document.addEventListener("keydown", pv.onKey, true);
+
+    pvRenderBody();
+    pvRenderMeta();
+    // Move focus off the site editor so a stray Enter can't re-trigger send.
+    pv.bodyEl.focus();
+  }
+
+  /** Render the message with each item wrapped in a coloured mark. */
+  function pvRenderBody() {
+    const items = pv.items.slice().sort((a, b) => a.start - b.start);
+    const out = [];
+    let cursor = 0;
+    for (const it of items) {
+      if (it.start > cursor) {
+        out.push(
+          `<span class="guardai-pv-seg" data-start="${cursor}">` +
+            escapeHtml(pv.original.slice(cursor, it.start)) +
+            `</span>`
+        );
+      }
+      const st = pvStyle(it.type, it.manual);
+      const shown = it.type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : it.value;
+      out.push(
+        `<mark class="guardai-pv-mark" data-start="${it.start}" data-type="${escapeHtml(it.type)}" ` +
+          `style="--pv:${st.color}">` +
+          escapeHtml(shown) +
+          `</mark>`
+      );
+      cursor = it.end;
+    }
+    if (cursor < pv.original.length) {
+      out.push(
+        `<span class="guardai-pv-seg" data-start="${cursor}">` +
+          escapeHtml(pv.original.slice(cursor)) +
+          `</span>`
+      );
+    }
+    pv.bodyEl.innerHTML = out.join("");
+  }
+
+  /** Update the "N items masked" count and the colour legend. */
+  function pvRenderMeta() {
+    const n = pv.items.length;
+    pv.countEl.textContent = n === 1 ? "1 item masked" : `${n} items masked`;
+    const seen = new Map();
+    for (const it of pv.items) {
+      const st = pvStyle(it.type, it.manual);
+      if (!seen.has(st.label)) seen.set(st.label, st.color);
+    }
+    pv.legendEl.innerHTML = Array.from(seen.entries())
+      .map(
+        ([label, color]) =>
+          `<span class="guardai-pv-legend__item">` +
+          `<span class="guardai-pv-dot" style="background:${color}"></span>` +
+          escapeHtml(label) +
+          `</span>`
+      )
+      .join("");
+  }
+
+  /** Map a selection boundary (node + offset) to an index in the original text. */
+  function pvOffset(node, offsetInNode) {
+    let span = node && node.nodeType === 3 ? node.parentElement : node;
+    while (span && span !== pv.bodyEl && !(span.getAttribute && span.hasAttribute("data-start"))) {
+      span = span.parentElement;
+    }
+    if (!span || !span.getAttribute || !span.hasAttribute("data-start")) return null;
+    const base = Number(span.getAttribute("data-start"));
+    if (node.nodeType === 3) return base + offsetInNode;
+    return offsetInNode > 0 ? base + span.textContent.length : base;
+  }
+
+  /** On a selection inside the message, offer to mask the highlighted text. */
+  function pvHandleSelection() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return pvHidePopup();
+    const range = sel.getRangeAt(0);
+    if (!pv.bodyEl.contains(range.commonAncestorContainer)) return pvHidePopup();
+    let s = pvOffset(range.startContainer, range.startOffset);
+    let e = pvOffset(range.endContainer, range.endOffset);
+    if (s == null || e == null) return pvHidePopup();
+    if (s > e) [s, e] = [e, s];
+    while (s < e && /\s/.test(pv.original[s])) s++;
+    while (e > s && /\s/.test(pv.original[e - 1])) e--;
+    if (e - s < 1) return pvHidePopup();
+    // Don't let a selection overlap an item that's already masked.
+    if (pv.items.some((it) => !(e <= it.start || s >= it.end))) return pvHidePopup();
+    pv.pendingSel = { start: s, end: e };
+    pvShowPopup(range.getBoundingClientRect());
+  }
+
+  function pvShowPopup(rect) {
+    pvHidePopup();
+    const pop = document.createElement("div");
+    pop.className = "guardai-pv-pop";
+    pop.innerHTML =
+      `<button class="guardai-pv-pop__btn" data-act="auto">Auto-replace</button>` +
+      `<button class="guardai-pv-pop__btn" data-act="custom">Custom replace</button>`;
+    document.body.appendChild(pop);
+    pv.popEl = pop;
+
+    pop.querySelector('[data-act="auto"]').onclick = pvAutoReplace;
+    pop.querySelector('[data-act="custom"]').onclick = pvCustomReplaceUI;
+
+    // Position above the selection, clamped to the viewport.
+    const w = pop.offsetWidth || 220;
+    let left = rect.left + rect.width / 2 - w / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = rect.top - (pop.offsetHeight || 40) - 8;
+    if (top < 8) top = rect.bottom + 8;
+    pop.style.left = left + "px";
+    pop.style.top = top + "px";
+  }
+
+  function pvHidePopup() {
+    if (pv && pv.popEl) {
+      pv.popEl.remove();
+      pv.popEl = null;
+    }
+  }
+
+  /** Commit a manual mask: add the item, refresh, clear the selection. */
+  function pvCommitManual(fake, type) {
+    if (!pv.pendingSel) return;
+    const { start, end } = pv.pendingSel;
+    const value = pv.original.slice(start, end);
+    pv.fakeByReal.set(value, fake);
+    pv.items.push({ start, end, value, type: type || "MANUAL", manual: true, fake });
+    pv.items.sort((a, b) => a.start - b.start);
+    pv.pendingSel = null;
+    pvHidePopup();
+    const sel = window.getSelection();
+    if (sel) sel.removeAllRanges();
+    pvRenderBody();
+    pvRenderMeta();
+  }
+
+  function pvAutoReplace() {
+    const { start, end } = pv.pendingSel;
+    const value = pv.original.slice(start, end);
+    let type = "NAME_PII"; // a realistic AU name is the generic fallback
+    try {
+      const fs = detector.scan(value);
+      const whole = fs.find((f) => masker.isMaskable(f.type) && f.value.trim() === value.trim());
+      const any = whole || fs.find((f) => masker.isMaskable(f.type));
+      if (any) type = any.type;
+    } catch {
+      /* fall back to NAME_PII */
+    }
+    pvCommitManual(pvFakeFor(type, value), type);
+  }
+
+  /** Swap the popup for a small input so the user can type their own fake. */
+  function pvCustomReplaceUI() {
+    if (!pv.popEl) return;
+    pv.popEl.innerHTML =
+      `<input class="guardai-pv-pop__input" type="text" placeholder="Your replacement" />` +
+      `<button class="guardai-pv-pop__btn guardai-pv-pop__go" data-act="go">Mask</button>`;
+    const input = pv.popEl.querySelector(".guardai-pv-pop__input");
+    const commit = () => {
+      const v = input.value.trim();
+      if (v) pvCommitManual(v, "CUSTOM");
+    };
+    pv.popEl.querySelector('[data-act="go"]').onclick = commit;
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        pvHidePopup();
+      }
+    });
+    input.focus();
+  }
+
+  /** Build the fully masked message, send it, and log every replacement. */
+  async function pvSendMasked() {
+    const { editor, original, resend } = pv;
+    const items = pv.items.slice().sort((a, b) => a.start - b.start);
+
+    for (const it of items) masker.registerManual(it.value, it.fake, it.type);
+    await masker.save();
+
+    let masked = original;
+    const replacements = [];
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (masked.slice(it.start, it.end) === it.value) {
+        masked = masked.slice(0, it.start) + it.fake + masked.slice(it.end);
+      } else {
+        masked = masked.split(it.value).join(it.fake);
+      }
+      replacements.push({ type: it.type, real: it.value, fake: it.fake });
+    }
+
+    pvClose();
+
+    await typeText(editor, masked);
+    await copyToClipboard(masked);
+    state.lastMaskedText = masked;
+    if (replacements.length) {
+      logActivity("mask", replacements);
+      reportStats({ masked: replacements.length });
+    }
+    editor.focus();
+    resend(); // send the masked message
+  }
+
+  function pvCancel() {
+    const editor = pv && pv.editor;
+    pvClose();
+    if (editor) editor.focus();
+  }
+
+  function pvClose() {
+    if (!pv) return;
+    pvHidePopup();
+    if (pv.onKey) document.removeEventListener("keydown", pv.onKey, true);
+    if (pv.el) pv.el.remove();
+    pv = null;
+  }
+
+  /* ------------------------------------------------------------------ *
    * Auto-decryption — watch responses and swap fakes back to real values.
    * We debounce mutations and only rewrite text nodes that actually contain
    * a known fake, to keep things cheap and avoid clobbering the DOM.
@@ -1137,7 +1475,7 @@
     if (
       p &&
       p.closest(
-        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle"
+        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle, .guardai-pv, .guardai-pv-pop"
       )
     ) {
       return true; // our own UI

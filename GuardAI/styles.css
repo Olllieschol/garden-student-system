@@ -458,3 +458,182 @@
   color: #3fb950;
   border-color: rgba(63, 185, 80, 0.35);
 }
+
+/* ---- Pre-send review overlay ------------------------------------------- */
+.guardai-pv {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 10, 14, 0.62);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  animation: guardai-pv-fade 0.14s ease-out;
+}
+@keyframes guardai-pv-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.guardai-pv__card {
+  width: min(680px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  color: #e6edf3;
+  animation: guardai-pv-rise 0.16s ease-out;
+}
+@keyframes guardai-pv-rise {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.guardai-pv__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #12161d;
+  border-bottom: 1px solid #21262d;
+}
+.guardai-pv__shield { font-size: 16px; }
+.guardai-pv__count {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+.guardai-pv__x {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.guardai-pv__x:hover { color: #e6edf3; background: #21262d; }
+.guardai-pv__hint {
+  padding: 10px 16px 0;
+  font-size: 12px;
+  color: #8b949e;
+  line-height: 1.45;
+}
+.guardai-pv__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 16px;
+}
+.guardai-pv-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #c9d1d9;
+}
+.guardai-pv-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.guardai-pv__body {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 16px;
+  padding: 14px;
+  background: #010409;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #e6edf3;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+.guardai-pv-mark {
+  background: color-mix(in srgb, var(--pv) 22%, transparent);
+  color: var(--pv);
+  border: 1px solid color-mix(in srgb, var(--pv) 55%, transparent);
+  border-radius: 5px;
+  padding: 0 3px;
+  font-weight: 600;
+}
+.guardai-pv-seg { color: #e6edf3; }
+.guardai-pv__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.guardai-pv__btn {
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid #2a313c;
+}
+.guardai-pv__btn--cancel {
+  background: #1c2230;
+  color: #c9d1d9;
+}
+.guardai-pv__btn--cancel:hover { background: #232b3a; border-color: #3a4350; }
+.guardai-pv__btn--send {
+  background: #238636;
+  color: #fff;
+  border-color: #2ea043;
+}
+.guardai-pv__btn--send:hover { background: #2ea043; }
+
+/* Selection mask popup */
+.guardai-pv-pop {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.guardai-pv-pop__btn {
+  background: #1c2230;
+  color: #c9d1d9;
+  border: 1px solid #2a313c;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.guardai-pv-pop__btn:hover { background: #232b3a; border-color: #3a4350; }
+.guardai-pv-pop__go { background: #238636; color: #fff; border-color: #2ea043; }
+.guardai-pv-pop__go:hover { background: #2ea043; }
+.guardai-pv-pop__input {
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 150px;
+  outline: none;
+}
+.guardai-pv-pop__input:focus { border-color: #58a6ff; }

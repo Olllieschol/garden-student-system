@@ -245,6 +245,43 @@
       return fake;
     }
 
+    /** Is this finding type one we swap for a fake (vs warning-only)? */
+    isMaskable(type) {
+      return MASKABLE.has(type);
+    }
+
+    /**
+     * Compute a candidate fake for a value WITHOUT registering it. Used by the
+     * pre-send preview so we can show the proposed replacement before the user
+     * commits. Reuses an existing mapping if one is already known, and avoids
+     * collisions with fakes that are already in the table.
+     */
+    previewFake(type, real) {
+      const existing = this.realToFake.get(real);
+      if (existing) return existing.fake;
+      let fake = generateFake(type, real);
+      let guard = 0;
+      while (this.fakeToReal.has(fake) && guard < 50) {
+        fake = generateFake(type, real + ":" + guard);
+        guard++;
+      }
+      return fake;
+    }
+
+    /**
+     * Register a real->fake pair the user committed in the preview (either an
+     * auto-generated or a custom replacement). Reuses an existing mapping for
+     * the same real value. Caller is responsible for calling save().
+     */
+    registerManual(real, fake, type) {
+      const existing = this.realToFake.get(real);
+      if (existing) return existing.fake;
+      const entry = { real, fake, type: type || "CUSTOM", createdAt: Date.now() };
+      this.realToFake.set(real, entry);
+      this.fakeToReal.set(fake, entry);
+      return fake;
+    }
+
     /**
      * Mask text given pre-computed findings from the detector.
      * Returns { masked, replacements } where replacements lists what changed.
