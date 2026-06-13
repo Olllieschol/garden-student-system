@@ -1300,7 +1300,8 @@
 
   /** Build the fully masked message, send it, and log every replacement. */
   async function pvSendMasked() {
-    const { editor, original, resend } = pv;
+    const storedEditor = pv.editor;
+    const original = pv.original;
     const items = pv.items.slice().sort((a, b) => a.start - b.start);
 
     for (const it of items) masker.registerManual(it.value, it.fake, it.type);
@@ -1318,16 +1319,32 @@
       replacements.push({ type: it.type, real: it.value, fake: it.fake });
     }
 
+    // Close the overlay first so it can't intercept focus/keys, but keep a
+    // resolved-live editor reference: the stored node may have been detached
+    // by a React re-render while the overlay was open.
     pvClose();
 
-    await typeText(editor, masked);
-    state.lastMaskedText = masked;
-    if (replacements.length) {
-      logActivity("mask", replacements);
-      reportStats({ masked: replacements.length });
+    try {
+      const editor =
+        storedEditor && document.contains(storedEditor)
+          ? storedEditor
+          : findEditor();
+      if (!editor) {
+        console.error("[GuardAI] Send masked: no editor found to type into.");
+        return;
+      }
+
+      await typeText(editor, masked);
+      state.lastMaskedText = masked;
+      if (replacements.length) {
+        logActivity("mask", replacements);
+        reportStats({ masked: replacements.length });
+      }
+      editor.focus();
+      triggerSend(editor); // send the masked message
+    } catch (e) {
+      console.error("[GuardAI] Send masked failed:", e);
     }
-    editor.focus();
-    resend(); // send the masked message
   }
 
   function pvCancel() {
