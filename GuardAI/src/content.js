@@ -248,36 +248,6 @@
   }
 
   /**
-   * Copy text to the clipboard. We prefer the async Clipboard API and fall
-   * back to a hidden textarea + execCommand("copy") for older/locked-down
-   * contexts. Best-effort: never throws.
-   */
-  async function copyToClipboard(text) {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch (_) {
-      /* permission denied or not focused — fall through */
-    }
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /**
    * Empty the editor without fighting its internal model: select all and delete
    * via execCommand, which every rich editor (ProseMirror/Lexical/Quill) and
    * plain textarea honours as a normal edit.
@@ -459,21 +429,16 @@
    *   1. compute the masked text,
    *   2. clear the editor and type the masked text in (every editor accepts
    *      typing; a reliable whole-string fallback guarantees it fully lands),
-   *   3. copy the masked text to the clipboard AFTER typing — the clipboard
-   *      fallback uses a temp textarea that steals focus, so doing it first
-   *      would break the typing into the real editor,
-   *   4. STOP — the user reviews and presses send themselves.
+   *   3. STOP — the user reviews and presses send themselves.
    * The matching fake->real swap happens automatically in the AI response.
+   * GuardAI never reads or writes the system clipboard, so a value the user
+   * copied stays intact for their next paste.
    * ------------------------------------------------------------------ */
   async function maskAndType(editor, text, findings) {
     const { masked, replacements } = await masker.mask(text, findings);
 
     // Type it in first, simulating a human. If typing didn't land, flag it.
     const ok = await typeText(editor, masked);
-
-    // Now copy the masked text to the clipboard (after typing, so its focus
-    // handling can't disturb the editor write).
-    await copyToClipboard(masked);
 
     // Remember what we typed so the user's own send isn't re-scanned/re-masked.
     state.lastMaskedText = masked;
@@ -1356,7 +1321,6 @@
     pvClose();
 
     await typeText(editor, masked);
-    await copyToClipboard(masked);
     state.lastMaskedText = masked;
     if (replacements.length) {
       logActivity("mask", replacements);

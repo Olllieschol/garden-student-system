@@ -6,8 +6,7 @@
   "author": "GuardAI",
 
   "permissions": [
-    "storage",
-    "clipboardWrite"
+    "storage"
   ],
 
   "host_permissions": [
