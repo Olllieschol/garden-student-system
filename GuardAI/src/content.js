@@ -170,8 +170,6 @@
     enabled: true, // master on/off (synced from storage)
     maskingEnabled: false, // mask-before-send mode
     autoRestore: true, // auto-swap fakes -> real in AI responses (panel toggle)
-    pendingSend: null, // {editor, text, resend} awaiting user choice
-    warningEl: null, // the live warning popup element
     lastMaskedText: null, // the masked text we just typed in; lets the user's
     // own manual send pass through without re-scanning/re-masking.
   };
@@ -422,34 +420,98 @@
   }
 
   /* ------------------------------------------------------------------ *
-   * Mask + type (NO auto-send). Shared by masking-mode and the warning
-   * popup's "Mask & type" button.
+   * Mask + type + review (NO auto-send).
    *
-   * Philosophy: never fight the site's editor and never auto-send. We:
-   *   1. compute the masked text,
+   * Philosophy: never fight the site's editor and never auto-send. On send we:
+   *   1. compute the masked text from everything the detector found,
    *   2. clear the editor and type the masked text in (every editor accepts
    *      typing; a reliable whole-string fallback guarantees it fully lands),
-   *   3. STOP — the user reviews and presses send themselves.
+   *   3. show a "Did we miss anything?" review in the side panel — the user
+   *      reviews, optionally masks anything we missed (which re-types the input
+   *      live), then presses send themselves.
    * The matching fake->real swap happens automatically in the AI response.
    * GuardAI never reads or writes the system clipboard, so a value the user
    * copied stays intact for their next paste.
    * ------------------------------------------------------------------ */
-  async function maskAndType(editor, text, findings) {
-    const { masked, replacements } = await masker.mask(text, findings);
+  async function maskAndReview(editor, original, findings) {
+    await masker.load();
 
-    // Type it in first, simulating a human. If typing didn't land, flag it.
-    const ok = await typeText(editor, masked);
+    // Seed the review with the maskable auto-detected findings (the detector
+    // already resolves overlaps). Warning-only findings can still be masked
+    // manually from the panel.
+    const fakeByReal = new Map();
+    const items = [];
+    for (const f of findings) {
+      if (!masker.isMaskable(f.type)) continue;
+      let fake = fakeByReal.get(f.value);
+      if (!fake) {
+        fake = masker.previewFake(f.type, f.value);
+        fakeByReal.set(f.value, fake);
+      }
+      items.push({
+        start: f.index,
+        end: f.index + f.value.length,
+        value: f.value,
+        type: f.type,
+        manual: false,
+        fake,
+      });
+    }
+    items.sort((a, b) => a.start - b.start);
 
-    // Remember what we typed so the user's own send isn't re-scanned/re-masked.
-    state.lastMaskedText = masked;
+    review = { editor, original, items, fakeByReal, pendingSel: null, popEl: null };
 
-    if (!ok) {
-      logActivity("mask", replacements);
-      return;
+    await applyReview(); // register + type the masked text into the input
+
+    // Surface the review in the side panel (open it if the user had collapsed it).
+    panelClosed = false;
+    ensurePanel();
+    if (reopenEl) reopenEl.style.display = "none";
+    renderReviewSection();
+    renderPanel();
+  }
+
+  /**
+   * Build the masked text from the current review items, type it into the live
+   * input field, and log the masks. Re-runnable: called once on send and again
+   * after each manual mask so the input updates in real time. logActivity
+   * dedupes, so re-runs only add newly-masked items to the log.
+   */
+  async function applyReview() {
+    if (!review) return;
+    const original = review.original;
+    const ordered = review.items.slice().sort((a, b) => a.start - b.start);
+
+    for (const it of ordered) masker.registerManual(it.value, it.fake, it.type);
+    await masker.save();
+
+    let masked = original;
+    const replacements = [];
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      const it = ordered[i];
+      if (masked.slice(it.start, it.end) === it.value) {
+        masked = masked.slice(0, it.start) + it.fake + masked.slice(it.end);
+      } else {
+        masked = masked.split(it.value).join(it.fake);
+      }
+      replacements.push({ type: it.type, real: it.value, fake: it.fake });
     }
 
+    // Re-resolve a live editor: the stored node may have been detached by a
+    // React re-render between the original send and a later manual edit.
+    const editor =
+      review.editor && document.contains(review.editor) ? review.editor : findEditor();
+    if (!editor) {
+      console.error("[GuardAI] No editor found to type masked text into.");
+      return;
+    }
+    review.editor = editor;
+
+    const ok = await typeText(editor, masked);
+    // Remember what we typed so the user's own send isn't re-scanned/re-masked.
+    state.lastMaskedText = masked;
     logActivity("mask", replacements);
-    reportStats({ masked: replacements.length });
+    if (ok) reportStats({ masked: replacements.length });
     editor.focus();
   }
 
@@ -528,6 +590,11 @@
   let panelListEl = null;
   let reopenEl = null;
   let panelClosed = false; // user explicitly closed the panel this session
+  // "Did we miss anything?" review section (created with the panel).
+  let reviewSectionEl = null;
+  let reviewBodyEl = null;
+  let reviewLegendEl = null;
+  let reviewCountEl = null;
 
   async function loadActivity() {
     try {
@@ -607,6 +674,15 @@
       `</div>` +
       `<button class="guardai-panel__switch" role="switch"></button>` +
       `</div>` +
+      `<div class="guardai-panel__review" style="display:none">` +
+      `<div class="guardai-panel__reviewhead">` +
+      `<span class="guardai-panel__reviewtitle">Did we miss anything?</span>` +
+      `<span class="guardai-panel__reviewcount"></span>` +
+      `</div>` +
+      `<div class="guardai-panel__reviewhint">Select any text we missed to mask it.</div>` +
+      `<div class="guardai-panel__reviewlegend"></div>` +
+      `<div class="guardai-panel__reviewbody" tabindex="0"></div>` +
+      `</div>` +
       `<div class="guardai-panel__actions">` +
       `<button class="guardai-panel__action" data-act="clear-log">Clear all</button>` +
       `<button class="guardai-panel__action guardai-panel__action--danger" data-act="clear-session">Clear session</button>` +
@@ -614,6 +690,11 @@
       `<div class="guardai-panel__list"></div>`;
     document.body.appendChild(panelEl);
     panelListEl = panelEl.querySelector(".guardai-panel__list");
+    reviewSectionEl = panelEl.querySelector(".guardai-panel__review");
+    reviewBodyEl = panelEl.querySelector(".guardai-panel__reviewbody");
+    reviewLegendEl = panelEl.querySelector(".guardai-panel__reviewlegend");
+    reviewCountEl = panelEl.querySelector(".guardai-panel__reviewcount");
+    reviewBodyEl.addEventListener("mouseup", reviewHandleSelection);
     panelEl.querySelector(".guardai-panel__close").onclick = closePanel;
     panelEl.querySelector(".guardai-panel__switch").onclick = () =>
       setAutoRestore(!state.autoRestore);
@@ -714,6 +795,7 @@
         panelClosed = false;
         reopenEl.style.display = "none";
         ensurePanel();
+        renderReviewSection();
         renderPanel();
       };
       document.body.appendChild(reopenEl);
@@ -787,16 +869,18 @@
 
   let bypassNext = false; // set true to allow the very next send through untouched
 
-  async function handleSendAttempt(editor, originalResend) {
+  async function handleSendAttempt(editor) {
     if (!state.enabled) return true; // extension off -> allow
 
     const text = getEditorText(editor).trim();
     if (!text) return true;
 
     // If this is the exact masked text we just typed in, the user is sending
-    // it themselves — let it through untouched (don't re-scan/re-mask).
+    // it themselves — let it through untouched (don't re-scan/re-mask), and
+    // clear the review now that the masked message is on its way.
     if (state.lastMaskedText && normalize(text) === normalize(state.lastMaskedText)) {
       state.lastMaskedText = null;
+      clearReview();
       return true;
     }
 
@@ -807,16 +891,11 @@
 
     reportStats({ detected: findings.length });
 
-    if (state.maskingEnabled) {
-      // Masking mode: mask + type the fakes in place, then STOP. The user
-      // reviews the masked text and presses send themselves.
-      await maskAndType(editor, text, findings);
-      return false; // we typed; nothing to send automatically
-    }
-
-    // Review mode: show the full-screen pre-send preview and wait for a choice.
-    showPreSendPreview(editor, text, findings, originalResend);
-    return false; // block until user decides
+    // Auto-mask everything detected, type it into the input, and surface a
+    // "Did we miss anything?" review in the side panel. The user reviews and
+    // presses send themselves.
+    await maskAndReview(editor, text, findings);
+    return false; // we typed; nothing to send automatically
   }
 
   /** Programmatically trigger the site's send (Enter on the editor). */
@@ -847,7 +926,7 @@
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      const allow = await handleSendAttempt(editor, makeResender(editor));
+      const allow = await handleSendAttempt(editor);
       if (allow) {
         bypassNext = true;
         makeResender(editor)();
@@ -874,7 +953,7 @@
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      const allow = await handleSendAttempt(editor, makeResender(editor));
+      const allow = await handleSendAttempt(editor);
       if (allow) {
         bypassNext = true;
         makeResender(editor)();
@@ -887,119 +966,6 @@
     return node === container || container.contains(node);
   }
 
-  /* ------------------------------------------------------------------ *
-   * Warning popup — non-blocking, positioned above the input field.
-   * ------------------------------------------------------------------ */
-  function showWarning(editor, text, findings, resend) {
-    dismissWarning();
-
-    // Group findings by type for a clean summary.
-    const groups = {};
-    for (const f of findings) {
-      (groups[f.type] = groups[f.type] || { label: f.label, reason: f.reason, items: [] }).items.push(
-        f.value
-      );
-    }
-
-    const wrap = document.createElement("div");
-    wrap.className = "guardai-warning";
-    wrap.setAttribute("role", "alertdialog");
-    wrap.setAttribute("aria-live", "polite");
-
-    const header = document.createElement("div");
-    header.className = "guardai-warning__header";
-    header.innerHTML = `
-      <span class="guardai-warning__shield">&#128737;</span>
-      <span class="guardai-warning__title">GuardAI detected sensitive data</span>
-      <button class="guardai-warning__close" aria-label="Dismiss">&times;</button>
-    `;
-
-    const body = document.createElement("div");
-    body.className = "guardai-warning__body";
-
-    const platformNote = document.createElement("p");
-    platformNote.className = "guardai-warning__platform";
-    platformNote.textContent = `Sending to ${CONFIG.name}: ${CONFIG.note}`;
-    body.appendChild(platformNote);
-
-    const list = document.createElement("ul");
-    list.className = "guardai-warning__list";
-    for (const key in groups) {
-      const g = groups[key];
-      const li = document.createElement("li");
-      li.innerHTML = `
-        <span class="guardai-warning__type">${escapeHtml(g.label)}</span>
-        <span class="guardai-warning__count">${g.items.length}</span>
-        <p class="guardai-warning__reason">${escapeHtml(g.reason)}</p>
-      `;
-      list.appendChild(li);
-    }
-    body.appendChild(list);
-
-    const actions = document.createElement("div");
-    actions.className = "guardai-warning__actions";
-    actions.innerHTML = `
-      <button class="guardai-btn guardai-btn--mask">Mask &amp; type</button>
-      <button class="guardai-btn guardai-btn--send">Send anyway</button>
-      <button class="guardai-btn guardai-btn--cancel">Cancel</button>
-    `;
-
-    wrap.appendChild(header);
-    wrap.appendChild(body);
-    wrap.appendChild(actions);
-    document.body.appendChild(wrap);
-    state.warningEl = wrap;
-
-    positionAbove(wrap, editor);
-    // Reposition if the layout shifts while the popup is open.
-    const reposition = () => positionAbove(wrap, editor);
-    window.addEventListener("resize", reposition);
-    window.addEventListener("scroll", reposition, true);
-    wrap._cleanup = () => {
-      window.removeEventListener("resize", reposition);
-      window.removeEventListener("scroll", reposition, true);
-    };
-
-    // --- wire up buttons ---
-    header.querySelector(".guardai-warning__close").onclick = dismissWarning;
-    actions.querySelector(".guardai-btn--cancel").onclick = () => {
-      dismissWarning();
-      editor.focus();
-    };
-    actions.querySelector(".guardai-btn--send").onclick = () => {
-      dismissWarning();
-      reportStats({ sentUnmasked: 1 });
-      resend();
-    };
-    actions.querySelector(".guardai-btn--mask").onclick = async () => {
-      dismissWarning();
-      await maskAndType(editor, text, findings);
-    };
-  }
-
-  function positionAbove(el, editor) {
-    const r = editor.getBoundingClientRect();
-    const margin = 12;
-    const width = Math.min(420, window.innerWidth - 24);
-    el.style.width = width + "px";
-    let left = r.left + r.width / 2 - width / 2;
-    left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
-    el.style.left = left + "px";
-    // Place above the editor; if not enough room, drop below it.
-    const elHeight = el.offsetHeight || 220;
-    let top = r.top - elHeight - margin;
-    if (top < 12) top = r.bottom + margin;
-    el.style.top = top + "px";
-  }
-
-  function dismissWarning() {
-    if (state.warningEl) {
-      if (state.warningEl._cleanup) state.warningEl._cleanup();
-      state.warningEl.remove();
-      state.warningEl = null;
-    }
-  }
-
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -1008,15 +974,15 @@
   }
 
   /* ------------------------------------------------------------------ *
-   * Pre-send review preview.
-   * When sensitive data is detected on send, we show a full-screen overlay that
-   * displays the exact message, highlights every detected item in a per-type
-   * colour, and lets the user mask anything the detector missed by selecting it.
-   * "Send masked" swaps every highlighted item for its fake and sends; "Cancel"
-   * leaves the original message untouched in the editor. Nothing is sent until
-   * the user chooses. Detection, masking and auto-restore are all reused as-is.
+   * "Did we miss anything?" review — lives in the side panel.
+   * On send we auto-mask everything detected and type the masked text into the
+   * input. This section then shows the user's ORIGINAL message with every
+   * masked item highlighted in a per-type colour, and lets them mask anything
+   * we missed by selecting it. A manual mask re-types the input field in real
+   * time. The user reviews and presses send themselves. No overlay, nothing is
+   * sent automatically. Detection, masking and auto-restore are reused as-is.
    * ------------------------------------------------------------------ */
-  const PV_STYLE = {
+  const MARK_STYLE = {
     NAME_PII: { label: "Name", color: "#58a6ff" },
     PHONE: { label: "Phone", color: "#f0883e" },
     EMAIL: { label: "Email", color: "#3fb950" },
@@ -1035,146 +1001,78 @@
     ACN: { label: "ACN", color: "#e3b341" },
     PASSWORD: { label: "Password", color: "#f85149" },
   };
-  const PV_DEFAULT = { label: "Sensitive", color: "#e3b341" };
-  const PV_MANUAL = { label: "Manual", color: "#ff7b9c" };
+  const MARK_DEFAULT = { label: "Sensitive", color: "#e3b341" };
+  const MARK_MANUAL = { label: "Manual", color: "#ff7b9c" };
 
-  let pv = null; // active preview state (null when closed)
+  // Active review state: { editor, original, items[], fakeByReal, pendingSel, popEl }
+  // items: [{ start, end, value, type, manual, fake }]
+  let review = null;
 
-  function pvStyle(type, manual) {
-    return PV_STYLE[type] || (manual ? PV_MANUAL : PV_DEFAULT);
+  function markStyle(type, manual) {
+    return MARK_STYLE[type] || (manual ? MARK_MANUAL : MARK_DEFAULT);
   }
 
   /** Get (memoised) the proposed fake for a real value so duplicates align. */
-  function pvFakeFor(type, value) {
-    if (pv.fakeByReal.has(value)) return pv.fakeByReal.get(value);
+  function reviewFakeFor(type, value) {
+    if (review.fakeByReal.has(value)) return review.fakeByReal.get(value);
     const f = masker.previewFake(type, value);
-    pv.fakeByReal.set(value, f);
+    review.fakeByReal.set(value, f);
     return f;
   }
 
-  async function showPreSendPreview(editor, original, findings, resend) {
-    if (pv) pvClose();
-    await masker.load();
-
-    pv = {
-      editor,
-      original,
-      resend,
-      items: [],
-      fakeByReal: new Map(),
-      pendingSel: null,
-      popEl: null,
-      onKey: null,
-    };
-
-    // Seed with the maskable auto-detected findings (detector already resolves
-    // overlaps). Warning-only findings can still be masked manually.
-    for (const f of findings) {
-      if (!masker.isMaskable(f.type)) continue;
-      pv.items.push({
-        start: f.index,
-        end: f.index + f.value.length,
-        value: f.value,
-        type: f.type,
-        manual: false,
-        fake: pvFakeFor(f.type, f.value),
-      });
+  /** Show/refresh the "Did we miss anything?" section in the panel. */
+  function renderReviewSection() {
+    if (!reviewSectionEl) return;
+    if (!review) {
+      reviewSectionEl.style.display = "none";
+      return;
     }
-    pv.items.sort((a, b) => a.start - b.start);
+    reviewSectionEl.style.display = "";
 
-    const overlay = document.createElement("div");
-    overlay.className = "guardai-pv";
-    overlay.innerHTML =
-      `<div class="guardai-pv__card" role="dialog" aria-label="GuardAI pre-send review">` +
-      `<div class="guardai-pv__head">` +
-      `<span class="guardai-pv__shield">&#128737;</span>` +
-      `<span class="guardai-pv__count"></span>` +
-      `<button class="guardai-pv__x" aria-label="Cancel">&times;</button>` +
-      `</div>` +
-      `<div class="guardai-pv__hint">Review what you're sending to ${escapeHtml(CONFIG.name)}. ` +
-      `Highlighted items are replaced with realistic fakes. Select any missed text to mask it too.</div>` +
-      `<div class="guardai-pv__legend"></div>` +
-      `<div class="guardai-pv__body" tabindex="0"></div>` +
-      `<div class="guardai-pv__foot">` +
-      `<button class="guardai-pv__btn guardai-pv__btn--cancel">Cancel</button>` +
-      `<button class="guardai-pv__btn guardai-pv__btn--send">Send masked</button>` +
-      `</div>` +
-      `</div>`;
-    document.body.appendChild(overlay);
-
-    pv.el = overlay;
-    pv.bodyEl = overlay.querySelector(".guardai-pv__body");
-    pv.countEl = overlay.querySelector(".guardai-pv__count");
-    pv.legendEl = overlay.querySelector(".guardai-pv__legend");
-
-    overlay.querySelector(".guardai-pv__x").onclick = pvCancel;
-    overlay.querySelector(".guardai-pv__btn--cancel").onclick = pvCancel;
-    overlay.querySelector(".guardai-pv__btn--send").onclick = pvSendMasked;
-    pv.bodyEl.addEventListener("mouseup", pvHandleSelection);
-
-    // Escape cancels; keep it scoped to while the overlay is open.
-    pv.onKey = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        pvCancel();
-      }
-    };
-    document.addEventListener("keydown", pv.onKey, true);
-
-    pvRenderBody();
-    pvRenderMeta();
-    // Move focus off the site editor so a stray Enter can't re-trigger send.
-    pv.bodyEl.focus();
-  }
-
-  /** Render the message with each item wrapped in a coloured mark. */
-  function pvRenderBody() {
-    const items = pv.items.slice().sort((a, b) => a.start - b.start);
+    // Body: the original message with each masked item wrapped in a colour mark.
+    const items = review.items.slice().sort((a, b) => a.start - b.start);
     const out = [];
     let cursor = 0;
     for (const it of items) {
       if (it.start > cursor) {
         out.push(
-          `<span class="guardai-pv-seg" data-start="${cursor}">` +
-            escapeHtml(pv.original.slice(cursor, it.start)) +
+          `<span class="guardai-review-seg" data-start="${cursor}">` +
+            escapeHtml(review.original.slice(cursor, it.start)) +
             `</span>`
         );
       }
-      const st = pvStyle(it.type, it.manual);
+      const st = markStyle(it.type, it.manual);
       const shown = it.type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : it.value;
       out.push(
-        `<mark class="guardai-pv-mark" data-start="${it.start}" data-type="${escapeHtml(it.type)}" ` +
-          `style="--pv:${st.color}">` +
+        `<mark class="guardai-review-mark" data-start="${it.start}" data-type="${escapeHtml(it.type)}" ` +
+          `style="--mk:${st.color}">` +
           escapeHtml(shown) +
           `</mark>`
       );
       cursor = it.end;
     }
-    if (cursor < pv.original.length) {
+    if (cursor < review.original.length) {
       out.push(
-        `<span class="guardai-pv-seg" data-start="${cursor}">` +
-          escapeHtml(pv.original.slice(cursor)) +
+        `<span class="guardai-review-seg" data-start="${cursor}">` +
+          escapeHtml(review.original.slice(cursor)) +
           `</span>`
       );
     }
-    pv.bodyEl.innerHTML = out.join("");
-  }
+    reviewBodyEl.innerHTML = out.join("");
 
-  /** Update the "N items masked" count and the colour legend. */
-  function pvRenderMeta() {
-    const n = pv.items.length;
-    pv.countEl.textContent = n === 1 ? "1 item masked" : `${n} items masked`;
+    // Count + colour legend.
+    const n = items.length;
+    if (reviewCountEl) reviewCountEl.textContent = n === 1 ? "1 item masked" : `${n} items masked`;
     const seen = new Map();
-    for (const it of pv.items) {
-      const st = pvStyle(it.type, it.manual);
+    for (const it of items) {
+      const st = markStyle(it.type, it.manual);
       if (!seen.has(st.label)) seen.set(st.label, st.color);
     }
-    pv.legendEl.innerHTML = Array.from(seen.entries())
+    reviewLegendEl.innerHTML = Array.from(seen.entries())
       .map(
         ([label, color]) =>
-          `<span class="guardai-pv-legend__item">` +
-          `<span class="guardai-pv-dot" style="background:${color}"></span>` +
+          `<span class="guardai-review-legend__item">` +
+          `<span class="guardai-review-dot" style="background:${color}"></span>` +
           escapeHtml(label) +
           `</span>`
       )
@@ -1182,9 +1080,13 @@
   }
 
   /** Map a selection boundary (node + offset) to an index in the original text. */
-  function pvOffset(node, offsetInNode) {
+  function reviewOffset(node, offsetInNode) {
     let span = node && node.nodeType === 3 ? node.parentElement : node;
-    while (span && span !== pv.bodyEl && !(span.getAttribute && span.hasAttribute("data-start"))) {
+    while (
+      span &&
+      span !== reviewBodyEl &&
+      !(span.getAttribute && span.hasAttribute("data-start"))
+    ) {
       span = span.parentElement;
     }
     if (!span || !span.getAttribute || !span.hasAttribute("data-start")) return null;
@@ -1194,36 +1096,37 @@
   }
 
   /** On a selection inside the message, offer to mask the highlighted text. */
-  function pvHandleSelection() {
+  function reviewHandleSelection() {
+    if (!review) return reviewHidePopup();
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return pvHidePopup();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return reviewHidePopup();
     const range = sel.getRangeAt(0);
-    if (!pv.bodyEl.contains(range.commonAncestorContainer)) return pvHidePopup();
-    let s = pvOffset(range.startContainer, range.startOffset);
-    let e = pvOffset(range.endContainer, range.endOffset);
-    if (s == null || e == null) return pvHidePopup();
+    if (!reviewBodyEl.contains(range.commonAncestorContainer)) return reviewHidePopup();
+    let s = reviewOffset(range.startContainer, range.startOffset);
+    let e = reviewOffset(range.endContainer, range.endOffset);
+    if (s == null || e == null) return reviewHidePopup();
     if (s > e) [s, e] = [e, s];
-    while (s < e && /\s/.test(pv.original[s])) s++;
-    while (e > s && /\s/.test(pv.original[e - 1])) e--;
-    if (e - s < 1) return pvHidePopup();
+    while (s < e && /\s/.test(review.original[s])) s++;
+    while (e > s && /\s/.test(review.original[e - 1])) e--;
+    if (e - s < 1) return reviewHidePopup();
     // Don't let a selection overlap an item that's already masked.
-    if (pv.items.some((it) => !(e <= it.start || s >= it.end))) return pvHidePopup();
-    pv.pendingSel = { start: s, end: e };
-    pvShowPopup(range.getBoundingClientRect());
+    if (review.items.some((it) => !(e <= it.start || s >= it.end))) return reviewHidePopup();
+    review.pendingSel = { start: s, end: e };
+    reviewShowPopup(range.getBoundingClientRect());
   }
 
-  function pvShowPopup(rect) {
-    pvHidePopup();
+  function reviewShowPopup(rect) {
+    reviewHidePopup();
     const pop = document.createElement("div");
-    pop.className = "guardai-pv-pop";
+    pop.className = "guardai-review-pop";
     pop.innerHTML =
-      `<button class="guardai-pv-pop__btn" data-act="auto">Auto-replace</button>` +
-      `<button class="guardai-pv-pop__btn" data-act="custom">Custom replace</button>`;
+      `<button class="guardai-review-pop__btn" data-act="auto">Auto-replace</button>` +
+      `<button class="guardai-review-pop__btn" data-act="custom">Custom replace</button>`;
     document.body.appendChild(pop);
-    pv.popEl = pop;
+    review.popEl = pop;
 
-    pop.querySelector('[data-act="auto"]').onclick = pvAutoReplace;
-    pop.querySelector('[data-act="custom"]').onclick = pvCustomReplaceUI;
+    pop.querySelector('[data-act="auto"]').onclick = reviewAutoReplace;
+    pop.querySelector('[data-act="custom"]').onclick = reviewCustomReplaceUI;
 
     // Position above the selection, clamped to the viewport.
     const w = pop.offsetWidth || 220;
@@ -1235,32 +1138,37 @@
     pop.style.top = top + "px";
   }
 
-  function pvHidePopup() {
-    if (pv && pv.popEl) {
-      pv.popEl.remove();
-      pv.popEl = null;
+  function reviewHidePopup() {
+    if (review && review.popEl) {
+      review.popEl.remove();
+      review.popEl = null;
     }
   }
 
-  /** Commit a manual mask: add the item, refresh, clear the selection. */
-  function pvCommitManual(fake, type) {
-    if (!pv.pendingSel) return;
-    const { start, end } = pv.pendingSel;
-    const value = pv.original.slice(start, end);
-    pv.fakeByReal.set(value, fake);
-    pv.items.push({ start, end, value, type: type || "MANUAL", manual: true, fake });
-    pv.items.sort((a, b) => a.start - b.start);
-    pv.pendingSel = null;
-    pvHidePopup();
+  /**
+   * Commit a manual mask: add the item, re-mask the input field in real time,
+   * refresh the section, and clear the selection.
+   */
+  async function reviewCommitManual(fake, type) {
+    if (!review || !review.pendingSel) return;
+    const { start, end } = review.pendingSel;
+    const value = review.original.slice(start, end);
+    review.fakeByReal.set(value, fake);
+    review.items.push({ start, end, value, type: type || "MANUAL", manual: true, fake });
+    review.items.sort((a, b) => a.start - b.start);
+    review.pendingSel = null;
+    reviewHidePopup();
     const sel = window.getSelection();
     if (sel) sel.removeAllRanges();
-    pvRenderBody();
-    pvRenderMeta();
+    await applyReview(); // re-type the input with the new mask applied
+    renderReviewSection();
+    renderPanel();
   }
 
-  function pvAutoReplace() {
-    const { start, end } = pv.pendingSel;
-    const value = pv.original.slice(start, end);
+  function reviewAutoReplace() {
+    if (!review || !review.pendingSel) return;
+    const { start, end } = review.pendingSel;
+    const value = review.original.slice(start, end);
     let type = "NAME_PII"; // a realistic AU name is the generic fallback
     try {
       const fs = detector.scan(value);
@@ -1270,21 +1178,21 @@
     } catch {
       /* fall back to NAME_PII */
     }
-    pvCommitManual(pvFakeFor(type, value), type);
+    reviewCommitManual(reviewFakeFor(type, value), type);
   }
 
   /** Swap the popup for a small input so the user can type their own fake. */
-  function pvCustomReplaceUI() {
-    if (!pv.popEl) return;
-    pv.popEl.innerHTML =
-      `<input class="guardai-pv-pop__input" type="text" placeholder="Your replacement" />` +
-      `<button class="guardai-pv-pop__btn guardai-pv-pop__go" data-act="go">Mask</button>`;
-    const input = pv.popEl.querySelector(".guardai-pv-pop__input");
+  function reviewCustomReplaceUI() {
+    if (!review || !review.popEl) return;
+    review.popEl.innerHTML =
+      `<input class="guardai-review-pop__input" type="text" placeholder="Your replacement" />` +
+      `<button class="guardai-review-pop__btn guardai-review-pop__go" data-act="go">Mask</button>`;
+    const input = review.popEl.querySelector(".guardai-review-pop__input");
     const commit = () => {
       const v = input.value.trim();
-      if (v) pvCommitManual(v, "CUSTOM");
+      if (v) reviewCommitManual(v, "CUSTOM");
     };
-    pv.popEl.querySelector('[data-act="go"]').onclick = commit;
+    review.popEl.querySelector('[data-act="go"]').onclick = commit;
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") {
@@ -1292,73 +1200,17 @@
         commit();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        pvHidePopup();
+        reviewHidePopup();
       }
     });
     input.focus();
   }
 
-  /** Build the fully masked message, send it, and log every replacement. */
-  async function pvSendMasked() {
-    const storedEditor = pv.editor;
-    const original = pv.original;
-    const items = pv.items.slice().sort((a, b) => a.start - b.start);
-
-    for (const it of items) masker.registerManual(it.value, it.fake, it.type);
-    await masker.save();
-
-    let masked = original;
-    const replacements = [];
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (masked.slice(it.start, it.end) === it.value) {
-        masked = masked.slice(0, it.start) + it.fake + masked.slice(it.end);
-      } else {
-        masked = masked.split(it.value).join(it.fake);
-      }
-      replacements.push({ type: it.type, real: it.value, fake: it.fake });
-    }
-
-    // Close the overlay first so it can't intercept focus/keys, but keep a
-    // resolved-live editor reference: the stored node may have been detached
-    // by a React re-render while the overlay was open.
-    pvClose();
-
-    try {
-      const editor =
-        storedEditor && document.contains(storedEditor)
-          ? storedEditor
-          : findEditor();
-      if (!editor) {
-        console.error("[GuardAI] Send masked: no editor found to type into.");
-        return;
-      }
-
-      await typeText(editor, masked);
-      state.lastMaskedText = masked;
-      if (replacements.length) {
-        logActivity("mask", replacements);
-        reportStats({ masked: replacements.length });
-      }
-      editor.focus();
-      triggerSend(editor); // send the masked message
-    } catch (e) {
-      console.error("[GuardAI] Send masked failed:", e);
-    }
-  }
-
-  function pvCancel() {
-    const editor = pv && pv.editor;
-    pvClose();
-    if (editor) editor.focus();
-  }
-
-  function pvClose() {
-    if (!pv) return;
-    pvHidePopup();
-    if (pv.onKey) document.removeEventListener("keydown", pv.onKey, true);
-    if (pv.el) pv.el.remove();
-    pv = null;
+  /** Tear down the active review (after the user sends, or on navigation). */
+  function clearReview() {
+    reviewHidePopup();
+    review = null;
+    renderReviewSection();
   }
 
   /* ------------------------------------------------------------------ *
@@ -1456,7 +1308,7 @@
     if (
       p &&
       p.closest(
-        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle, .guardai-pv, .guardai-pv-pop"
+        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle, .guardai-review-pop"
       )
     ) {
       return true; // our own UI
@@ -1820,6 +1672,7 @@
     lastHref = location.href;
     state.lastMaskedText = null; // don't carry a bypass into a new conversation
     bypassNext = false;
+    clearReview(); // a half-finished review doesn't belong in a new conversation
     announcedSwaps.clear(); // re-announce restores in the new view
     if (document.body) {
       try {
