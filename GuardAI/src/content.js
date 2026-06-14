@@ -646,6 +646,7 @@
   let msgLegendEl = null;
   let msgEmptyEl = null;
   let footerSendEl = null;
+  let msgApplyEl = null; // "Apply changes" button in the MESSAGE tab
   let maskPromptEl = null; // the "Mask & Send / Mask & Edit" bar above the input
 
   async function loadActivity() {
@@ -736,6 +737,7 @@
       `<div class="guardai-panel__pane" data-pane="message">` +
       `<div class="guardai-panel__msglegend"></div>` +
       `<div class="guardai-panel__editable" contenteditable="true" spellcheck="false"></div>` +
+      `<button class="guardai-panel__apply" style="display:none">Apply changes</button>` +
       `<div class="guardai-panel__msgempty">Nothing to edit yet. Choose <b>Mask &amp; Edit</b> when GuardAI detects sensitive data and your masked message appears here.</div>` +
       `</div>` +
       `</div>` +
@@ -750,8 +752,10 @@
     msgLegendEl = panelEl.querySelector(".guardai-panel__msglegend");
     msgEmptyEl = panelEl.querySelector(".guardai-panel__msgempty");
     footerSendEl = panelEl.querySelector(".guardai-panel__send");
+    msgApplyEl = panelEl.querySelector(".guardai-panel__apply");
 
     msgEditableEl.addEventListener("mouseup", msgHandleSelection);
+    msgApplyEl.onclick = applyMessageEdits;
     panelEl.querySelector(".guardai-panel__close").onclick = closePanel;
     panelEl.querySelector(".guardai-panel__switch").onclick = () =>
       setAutoRestore(!state.autoRestore);
@@ -1272,10 +1276,12 @@
       msgEditableEl.style.display = "none";
       if (msgEmptyEl) msgEmptyEl.style.display = "";
       if (msgLegendEl) msgLegendEl.innerHTML = "";
+      if (msgApplyEl) msgApplyEl.style.display = "none";
       return;
     }
     msgEditableEl.style.display = "";
     if (msgEmptyEl) msgEmptyEl.style.display = "none";
+    if (msgApplyEl) msgApplyEl.style.display = "";
 
     const out = [];
     let cursor = 0;
@@ -1476,6 +1482,24 @@
     let finalText = msgEditableEl.innerText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
     await typeText(live, finalText);
     state.lastMaskedText = finalText;
+  }
+
+  /**
+   * "Apply changes": push whatever the user has written in the MESSAGE-tab
+   * editor into the live chat input, then briefly confirm on the button.
+   */
+  async function applyMessageEdits() {
+    if (!msgApplyEl) return;
+    await syncLiveInput();
+    const orig = "Apply changes";
+    msgApplyEl.textContent = "Applied \u2713";
+    msgApplyEl.classList.add("guardai-panel__apply--done");
+    clearTimeout(applyMessageEdits._t);
+    applyMessageEdits._t = setTimeout(() => {
+      if (!msgApplyEl) return;
+      msgApplyEl.textContent = orig;
+      msgApplyEl.classList.remove("guardai-panel__apply--done");
+    }, 1400);
   }
 
   /* ---- Tabs, footer, send ---- */

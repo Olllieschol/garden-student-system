@@ -400,7 +400,7 @@
   // ---- Health & sensitive personal ---------------------------------------
   function detectHealth(text, out) {
     const re =
-      /\b(diagnos(?:ed|is)|prescrib(?:ed|tion)|prescription|medication|dosage|\d+\s?mg\b|symptoms?|cancer|diabet(?:es|ic)|depression|anxiety|bipolar|schizophreni\w*|hiv|aids|pregnan\w*|chemotherapy|therapy|psychiatr\w*|mental health|blood test|medical (?:record|history|condition))\b/gi;
+      /\b(medicare(?:\s*(?:card|number))?|diagnos(?:ed|is)|prescrib(?:ed|tion)|prescription|medication|dosage|\d+\s?mg\b|symptoms?|cancer|diabet(?:es|ic)|depression|anxiety|bipolar|schizophreni\w*|hiv|aids|pregnan\w*|chemotherapy|therapy|psychiatr\w*|mental health|blood test|medical (?:record|history|condition))\b/gi;
     let m;
     while ((m = re.exec(text))) {
       out.push(finding("HEALTH", "Health / medical information", m[0], m.index, "medium"));
@@ -456,16 +456,32 @@
   }
 
   // ---- Names (only with another identifier) ------------------------------
+  // Identifier / category keywords that must never be read as a name. If either
+  // word of a candidate "First Last" pair is one of these (e.g. "Her Medicare",
+  // "My TFN", "His Licence"), it's a reference to an identifier, not a person.
+  const NAME_CONTEXT_WORDS = new Set([
+    "medicare", "tfn", "abn", "acn", "bsb", "licence", "license", "passport",
+    "visa", "ssn", "pension", "centrelink", "ndis", "ihi", "ahpra",
+    "number", "card", "id", "identifier",
+  ]);
   function detectNames(text, out, hasIdentifier) {
     if (!hasIdentifier) return;
     const re = /\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/g;
     const STOPWORDS = new Set([
       "Hi", "Hello", "Dear", "Thanks", "Thank", "Kind", "Best", "The", "This",
       "That", "My", "Please", "Could", "Would", "Should", "Date", "Tax", "File",
+      "Her", "His", "Their", "Our", "Your", "Its",
     ]);
     let m;
     while ((m = re.exec(text))) {
       if (STOPWORDS.has(m[1])) continue;
+      // Skip if either token is an identifier/category keyword.
+      if (
+        NAME_CONTEXT_WORDS.has(m[1].toLowerCase()) ||
+        NAME_CONTEXT_WORDS.has(m[2].toLowerCase())
+      ) {
+        continue;
+      }
       out.push(finding("NAME_PII", "Full name (with other PII)", m[0], m.index, "medium"));
     }
   }

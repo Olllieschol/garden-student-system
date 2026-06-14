@@ -461,6 +461,25 @@
   transition: border-color 0.15s;
 }
 .guardai-panel__editable:focus { border-color: #4a4a4a; }
+.guardai-panel__apply {
+  width: 100%;
+  margin-top: 12px;
+  background: #4CAF82;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.15s, background 0.15s;
+}
+.guardai-panel__apply:hover { filter: brightness(1.08); }
+.guardai-panel__apply--done {
+  background: #2f6f52;
+  cursor: default;
+}
 .guardai-panel__mark {
   background: color-mix(in srgb, var(--mk) 20%, transparent);
   color: var(--mk);
