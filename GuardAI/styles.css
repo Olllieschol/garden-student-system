@@ -470,6 +470,8 @@
   font-weight: 600;
   white-space: nowrap;
 }
+/* Passwords keep their real fake as text (so it sends correctly) but render as dots. */
+.guardai-panel__mark--secret { -webkit-text-security: disc; text-security: disc; }
 .guardai-panel__msgempty {
   color: #8a8a8f;
   font-size: 13px;
@@ -543,7 +545,7 @@
   padding: 0 2px;
 }
 .guardai-prompt__shield { font-size: 18px; }
-.guardai-prompt__text { font-size: 14px; font-weight: 600; color: #f4f4f5; }
+.guardai-prompt__text { font-size: 14px; font-weight: 600; color: #f4f4f5; flex: 1; }
 .guardai-prompt__btns { display: flex; gap: 10px; }
 .guardai-prompt__btn {
   flex: 1;
@@ -567,6 +569,83 @@
   border-color: #3a3a3a;
 }
 .guardai-prompt__btn--edit:hover { background: #2e2e2e; border-color: #4a4a4a; }
+
+/* ---- Educational warning variant ---- */
+.guardai-prompt--warn { width: 400px; }
+.guardai-prompt__close {
+  background: none;
+  border: none;
+  color: #8a8a8f;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 8px;
+  transition: color 0.15s;
+}
+.guardai-prompt__close:hover { color: #f4f4f5; }
+.guardai-prompt__platform {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #FFD166;
+  background: rgba(255, 209, 102, 0.1);
+  border: 1px solid rgba(255, 209, 102, 0.25);
+  border-radius: 12px;
+}
+.guardai-prompt__list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.guardai-prompt__item {
+  background: #242424;
+  border: 1px solid #2f2f2f;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.guardai-prompt__itemhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.guardai-prompt__cat { font-size: 14px; font-weight: 600; color: #6B9FFF; }
+.guardai-prompt__count {
+  background: #1a1a1a;
+  border: 1px solid #3a3a3a;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a9a9f;
+}
+.guardai-prompt__why {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #b8b8bd;
+}
+.guardai-prompt__btns--secondary { margin-top: 10px; }
+.guardai-prompt__btn--ghost {
+  background: transparent;
+  color: #9a9a9f;
+  border-color: #3a3a3a;
+  font-weight: 600;
+}
+.guardai-prompt__btn--ghost:hover { background: #242424; color: #d8d8d8; border-color: #4a4a4a; }
+.guardai-prompt__btn--anyway { color: #FF8C42; border-color: rgba(255, 140, 66, 0.4); }
+.guardai-prompt__btn--anyway:hover {
+  background: rgba(255, 140, 66, 0.12);
+  border-color: rgba(255, 140, 66, 0.7);
+  color: #FF8C42;
+}
 
 /* ---- Collapsed reopen badge ---- */
 .guardai-reopen {

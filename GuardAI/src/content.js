@@ -953,10 +953,10 @@
 
     reportStats({ detected: findings.length });
 
-    // Offer the choice: "Mask & Send" (mask + send now) or "Mask & Edit"
-    // (mask, then edit in the MESSAGE tab before sending). Either way we block
-    // this raw send.
-    showMaskPrompt(editor, text, findings);
+    // Educate first: show the warning popup listing each detected item, the
+    // category, and WHY it's risky on this platform. From there the user picks
+    // Cancel, Send anyway, Mask & Send, or Mask & Edit. We block this raw send.
+    showWarning(editor, text, findings, makeResender(editor));
     return false;
   }
 
@@ -1077,41 +1077,97 @@
     return MARK_STYLE[type] || (manual ? MARK_MANUAL : MARK_DEFAULT);
   }
 
-  /* ---- "Mask & Send / Mask & Edit" prompt above the input ---- */
+  /* ---- Educational warning popup above the input ----
+   * The first thing the user sees on detection. It lists each detected item by
+   * category, explains in plain English WHY each is risky on this platform, and
+   * offers four choices: Cancel, Send anyway, Mask & Send, Mask & Edit. This is
+   * the teaching moment that makes GuardAI useful for non-technical users. */
 
-  function showMaskPrompt(editor, text, findings) {
+  function showWarning(editor, text, findings, resend) {
     dismissMaskPrompt();
-    const n = findings.length;
-    const bar = document.createElement("div");
-    bar.className = "guardai-prompt";
-    bar.innerHTML =
+
+    // Group findings by type so the list shows one row per category, with a
+    // count and the shared "why it's risky" reason.
+    const groups = {};
+    for (const f of findings) {
+      const g =
+        groups[f.type] ||
+        (groups[f.type] = { label: f.label, reason: f.reason, items: [] });
+      g.items.push(f.value);
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = "guardai-prompt guardai-prompt--warn";
+    wrap.setAttribute("role", "alertdialog");
+    wrap.setAttribute("aria-live", "polite");
+
+    const rows = Object.keys(groups)
+      .map((key) => {
+        const g = groups[key];
+        return (
+          `<li class="guardai-prompt__item">` +
+          `<div class="guardai-prompt__itemhead">` +
+          `<span class="guardai-prompt__cat">${escapeHtml(g.label)}</span>` +
+          `<span class="guardai-prompt__count">${g.items.length}</span>` +
+          `</div>` +
+          (g.reason
+            ? `<p class="guardai-prompt__why">${escapeHtml(g.reason)}</p>`
+            : "") +
+          `</li>`
+        );
+      })
+      .join("");
+
+    wrap.innerHTML =
       `<div class="guardai-prompt__head">` +
       `<span class="guardai-prompt__shield">&#128737;</span>` +
-      `<span class="guardai-prompt__text">${
-        n === 1 ? "1 sensitive item detected" : n + " sensitive items detected"
-      }</span>` +
+      `<span class="guardai-prompt__text">GuardAI detected sensitive data</span>` +
+      `<button class="guardai-prompt__close" aria-label="Dismiss">&times;</button>` +
       `</div>` +
+      `<p class="guardai-prompt__platform">Sending to ${escapeHtml(
+        CONFIG.name
+      )}: ${escapeHtml(CONFIG.note || "")}</p>` +
+      `<ul class="guardai-prompt__list">${rows}</ul>` +
       `<div class="guardai-prompt__btns">` +
       `<button class="guardai-prompt__btn guardai-prompt__btn--send">Mask &amp; Send</button>` +
       `<button class="guardai-prompt__btn guardai-prompt__btn--edit">Mask &amp; Edit</button>` +
+      `</div>` +
+      `<div class="guardai-prompt__btns guardai-prompt__btns--secondary">` +
+      `<button class="guardai-prompt__btn guardai-prompt__btn--ghost guardai-prompt__btn--anyway">Send anyway</button>` +
+      `<button class="guardai-prompt__btn guardai-prompt__btn--ghost guardai-prompt__btn--cancel">Cancel</button>` +
       `</div>`;
-    document.body.appendChild(bar);
-    maskPromptEl = bar;
+    document.body.appendChild(wrap);
+    maskPromptEl = wrap;
 
-    bar.querySelector(".guardai-prompt__btn--send").onclick = () => {
+    wrap.querySelector(".guardai-prompt__close").onclick = () => {
+      dismissMaskPrompt();
+      const live = editor && document.contains(editor) ? editor : findEditor();
+      if (live) live.focus();
+    };
+    wrap.querySelector(".guardai-prompt__btn--cancel").onclick = () => {
+      dismissMaskPrompt();
+      const live = editor && document.contains(editor) ? editor : findEditor();
+      if (live) live.focus();
+    };
+    wrap.querySelector(".guardai-prompt__btn--anyway").onclick = () => {
+      dismissMaskPrompt();
+      reportStats({ sentUnmasked: 1 });
+      resend();
+    };
+    wrap.querySelector(".guardai-prompt__btn--send").onclick = () => {
       dismissMaskPrompt();
       doMaskAndSend(editor, text, findings);
     };
-    bar.querySelector(".guardai-prompt__btn--edit").onclick = () => {
+    wrap.querySelector(".guardai-prompt__btn--edit").onclick = () => {
       dismissMaskPrompt();
       doMaskAndEdit(editor, text, findings);
     };
 
-    positionPromptAbove(bar, editor);
-    const reposition = () => positionPromptAbove(bar, editor);
+    positionPromptAbove(wrap, editor);
+    const reposition = () => positionPromptAbove(wrap, editor);
     window.addEventListener("resize", reposition, true);
     window.addEventListener("scroll", reposition, true);
-    bar._cleanup = () => {
+    wrap._cleanup = () => {
       window.removeEventListener("resize", reposition, true);
       window.removeEventListener("scroll", reposition, true);
     };
@@ -1121,7 +1177,7 @@
     const ref = editor && document.contains(editor) ? editor : findEditor();
     if (!ref) return;
     const r = ref.getBoundingClientRect();
-    const w = el.offsetWidth || 360;
+    const w = el.offsetWidth || 380;
     let left = r.left + r.width / 2 - w / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
     let top = r.top - (el.offsetHeight || 80) - 12;
@@ -1179,11 +1235,13 @@
 
   function markHtml(type, manual, fake) {
     const st = markStyle(type, manual);
-    const shown = type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : fake;
+    // Keep the real fake as the text content (so innerText sends correctly) and
+    // hide passwords visually with CSS instead of replacing the characters.
+    const secret = type === "PASSWORD" ? " guardai-panel__mark--secret" : "";
     return (
-      `<mark class="guardai-panel__mark" contenteditable="false" data-type="${escapeHtml(type)}" ` +
+      `<mark class="guardai-panel__mark${secret}" contenteditable="false" data-type="${escapeHtml(type)}" ` +
       `style="--mk:${st.color}">` +
-      escapeHtml(shown) +
+      escapeHtml(fake) +
       `</mark>`
     );
   }
@@ -1278,12 +1336,13 @@
     if (!msgPop) return;
     msgPop.innerHTML =
       `<input class="guardai-review-pop__input" type="text" placeholder="Your replacement" />` +
-      `<button class="guardai-review-pop__btn guardai-review-pop__go" data-act="go">Mask</button>`;
+      `<button class="guardai-review-pop__btn guardai-review-pop__go" data-act="go">Apply</button>`;
     const input = msgPop.querySelector(".guardai-review-pop__input");
     const commit = () => {
       const v = input.value.trim();
       if (v) msgReplaceSelection(v, "CUSTOM");
     };
+    // Confirm on click of "Apply" or by pressing Enter in the field.
     msgPop.querySelector('[data-act="go"]').onclick = commit;
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
@@ -1300,8 +1359,9 @@
 
   /**
    * Replace the pending selection in the editable with a coloured mark carrying
-   * the fake, register the real<->fake pair, and log it. The DOM is mutated in
-   * place so the user's other edits are preserved.
+   * the fake, register the real<->fake pair, log it, and re-type the live chat
+   * input so the masked change is reflected in real time before the user sends.
+   * The editable DOM is mutated in place so other edits are preserved.
    */
   async function msgReplaceSelection(fake, type) {
     if (!review || !msgPending) return;
@@ -1315,11 +1375,12 @@
 
     const st = markStyle(type, true);
     const mark = document.createElement("mark");
-    mark.className = "guardai-panel__mark";
+    mark.className =
+      "guardai-panel__mark" + (type === "PASSWORD" ? " guardai-panel__mark--secret" : "");
     mark.setAttribute("contenteditable", "false");
     mark.setAttribute("data-type", type);
     mark.style.setProperty("--mk", st.color);
-    mark.textContent = type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : fake;
+    mark.textContent = fake; // real fake stays; CSS hides passwords visually
 
     const frag = document.createDocumentFragment();
     if (lead) frag.appendChild(document.createTextNode(lead));
@@ -1337,9 +1398,24 @@
 
     review.items.push({ start: -1, end: -1, value: real, type, manual: true, fake });
     review.fakeByReal.set(real, fake);
-    logActivity("mask", [{ type, real, fake }]);
+    logActivity("mask", [{ type, real, fake }]); // shows in the MASKED tab
     renderMsgLegend();
     renderPanel();
+    await syncLiveInput(); // reflect the change in the chat input immediately
+  }
+
+  /**
+   * Push the current MESSAGE-tab text into the live chat input. Called after a
+   * manual mask so the input always matches what the user sees in the panel.
+   */
+  async function syncLiveInput() {
+    if (!msgEditableEl) return;
+    const live = liveEditor();
+    if (!live) return;
+    if (review) review.editor = live;
+    let finalText = msgEditableEl.innerText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
+    await typeText(live, finalText);
+    state.lastMaskedText = finalText;
   }
 
   /* ---- Tabs, footer, send ---- */
