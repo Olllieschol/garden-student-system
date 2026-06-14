@@ -190,7 +190,10 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.guardai_enabled) state.enabled = changes.guardai_enabled.newValue !== false;
+    if (changes.guardai_enabled) {
+      state.enabled = changes.guardai_enabled.newValue !== false;
+      applyEnabledState();
+    }
     if (changes.guardai_masking_enabled)
       state.maskingEnabled = changes.guardai_masking_enabled.newValue === true;
     if (changes.guardai_auto_restore) {
@@ -1042,6 +1045,7 @@
     "keydown",
     async (e) => {
       if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      if (!state.enabled) return; // master off — never intercept the send
       // Resolve the editor the user is actually typing in (not just the first
       // match on the page) so multi-editor / re-rendered layouts still intercept.
       const editor = findEditorFor(e.target) || findEditor();
@@ -1071,6 +1075,7 @@
     async (e) => {
       const btn = e.target.closest(CONFIG.sendButton.join(","));
       if (!btn) return;
+      if (!state.enabled) return; // master off — never intercept the send
 
       if (bypassNext) {
         bypassNext = false;
@@ -1391,22 +1396,19 @@
 
   /**
    * Build the read-only "What you see" view by transforming the editable's
-   * current DOM: every mark shows its REAL value, with the fake as a small grey
-   * caption underneath. Derived from the editable so it always matches the live
-   * message (including free edits and in-place manual masks).
+   * current DOM: every mark shows its REAL value with the coloured highlight,
+   * and nothing underneath. Derived from the editable so it always matches the
+   * live message (including free edits and in-place manual masks).
    */
   function buildReadView() {
     if (!msgRealViewEl || !msgEditableEl) return;
     const clone = msgEditableEl.cloneNode(true);
     clone.querySelectorAll(".guardai-panel__mark").forEach((m) => {
       const real = m.getAttribute("data-real") || "";
-      const fake = m.getAttribute("data-fake") || m.textContent;
       m.textContent = real;
-      if (m.getAttribute("data-type") === "PASSWORD") {
-        m.removeAttribute("data-sub");
-      } else {
-        m.setAttribute("data-sub", fake);
-      }
+      // No grey fake-value caption in the "What you see" view — keep only the
+      // coloured highlight on the real word.
+      m.removeAttribute("data-sub");
     });
     msgRealViewEl.innerHTML = clone.innerHTML;
   }
@@ -1875,6 +1877,7 @@
    * response as it arrives.
    */
   function scheduleUnmask() {
+    if (!state.enabled) return; // master off — no monitoring
     if (masker.size === 0) return; // nothing to swap back
     const now = Date.now();
     clearTimeout(unmaskTimer);
@@ -2181,6 +2184,52 @@
     });
   }
 
+  /**
+   * Decoration is decoupled from the (masker-gated, debounced) unmask pass so
+   * that EVERY message gets its toggle button — including older messages that
+   * mount only when the user scrolls up through a long (virtualised)
+   * conversation. The observer and a capture-phase scroll listener both feed
+   * this. It is independent of masker.size: a button is harmless on a message
+   * with nothing to swap, and buildSwapRules reads the live mapping at click
+   * time so it works the moment any data is masked.
+   */
+  let decorateTimer = null;
+  function scheduleDecorate() {
+    if (!state.enabled) return; // master off — no UI injection
+    clearTimeout(decorateTimer);
+    decorateTimer = setTimeout(async () => {
+      if (!state.enabled) return;
+      await masker.load();
+      decorateMessages(findResponseRoot());
+    }, 120);
+  }
+
+  /** Remove every piece of GuardAI UI we've injected into the page. */
+  function teardownUI() {
+    document
+      .querySelectorAll(
+        ".guardai-msgtoggle, .guardai-warning, .guardai-toast, .guardai-review-pop, .guardai-mark-tip"
+      )
+      .forEach((el) => el.remove());
+    dismissMaskPrompt();
+    if (panelEl) panelEl.style.display = "none";
+    if (reopenEl) reopenEl.style.display = "none";
+  }
+
+  /**
+   * React to the master on/off toggle flipping at runtime. Off -> strip all
+   * injected UI and stop (the send listeners and observer callbacks already
+   * short-circuit on !state.enabled). On -> resume a restore + decorate pass.
+   */
+  function applyEnabledState() {
+    if (state.enabled) {
+      scheduleUnmask();
+      scheduleDecorate();
+    } else {
+      teardownUI();
+    }
+  }
+
   async function runUnmaskPass() {
     await masker.load();
     if (masker.size === 0) return;
@@ -2271,7 +2320,10 @@
     if (fresh.length) logActivity(state.autoRestore ? "unmask" : "pending", fresh);
   }
 
-  const observer = new MutationObserver(() => scheduleUnmask());
+  const observer = new MutationObserver(() => {
+    scheduleUnmask();
+    scheduleDecorate();
+  });
 
   /* ------------------------------------------------------------------ *
    * Boot.
@@ -2295,8 +2347,13 @@
       renderPanel();
     }
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    // Decorate messages as the user scrolls: long conversations are virtualised,
+    // so older messages only mount on scroll. Capture phase catches scrolling on
+    // inner scroll containers (e.g. ChatGPT scrolls a div, not the window).
+    window.addEventListener("scroll", scheduleDecorate, { capture: true, passive: true });
     // Initial pass in case a conversation with masked data is reloaded.
     scheduleUnmask();
+    scheduleDecorate();
   }
 
   /* ------------------------------------------------------------------ *
@@ -2325,6 +2382,7 @@
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     }
     scheduleUnmask();
+    scheduleDecorate();
   }
 
   (function patchHistoryForSoftNav() {
