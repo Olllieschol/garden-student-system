@@ -274,14 +274,19 @@
   }
 
   /** Collapse the caret to the very end of a contenteditable so the next
-   * insertText appends rather than overwriting. */
+   * insertText appends rather than overwriting. Silently no-ops if the node
+   * has been detached by a React/ProseMirror re-render. */
   function caretToEnd(el) {
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false); // false = collapse to end
-    sel.removeAllRanges();
-    sel.addRange(range);
+    try {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false); // false = collapse to end
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {
+      /* node detached — caller handles re-find */
+    }
   }
 
   /**
@@ -320,6 +325,16 @@
     clearEditor(el);
     await delay(20);
 
+    // React/ProseMirror can remount the editor node during the delay above.
+    // Re-resolve a fresh reference if the original is now detached so that
+    // subsequent operations don't throw NotFoundError.
+    if (!document.contains(el)) {
+      const fresh = findEditor();
+      if (!fresh) return false;
+      el = fresh;
+      el.focus();
+    }
+
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
       for (const ch of text) {
         insertChar(el, ch);
@@ -344,6 +359,9 @@
     el.focus();
     caretToEnd(el);
     for (const ch of text) {
+      // If React unmounted the editor mid-loop, stop char-by-char and fall
+      // through to replaceAll which will re-find the editor.
+      if (!document.contains(el)) break;
       caretToEnd(el);
       insertChar(el, ch);
       await delay(3);
@@ -351,7 +369,12 @@
     el.dispatchEvent(new InputEvent("input", { bubbles: true }));
     if (normalize(getEditorText(el)).includes(normalize(text))) return true;
 
-    // Char-by-char didn't fully land — replace everything reliably.
+    // Char-by-char didn't fully land (possibly because the node was detached
+    // mid-loop). Re-find the editor before the whole-string fallback.
+    if (!document.contains(el)) {
+      const fresh = findEditor();
+      if (fresh) el = fresh;
+    }
     return replaceAll(el, text);
   }
 
@@ -511,11 +534,15 @@
       live = liveEditor();
     }
     if (!live) {
-      console.error("[GuardAI] No editor found to type masked text into.");
+      showErrorToast("Could not find the chat input — please click in the chat box and try again.");
       return;
     }
     review.editor = live;
     const ok = await typeText(live, masked);
+    // typeText may have re-found a fresh editor node; re-resolve so triggerSend
+    // dispatches to the element that is actually in the DOM right now.
+    live = liveEditor();
+    review.editor = live;
     state.lastMaskedText = masked;
     const replacements = review.items.map((it) => ({
       type: it.type,
@@ -531,7 +558,7 @@
     renderMessageTab();
     renderPanel();
     updateFooter();
-    live.focus();
+    if (live) live.focus();
     triggerSend(live);
   }
 
@@ -551,11 +578,14 @@
       live = liveEditor();
     }
     if (!live) {
-      console.error("[GuardAI] No editor found to type masked text into.");
+      showErrorToast("Could not find the chat input — please click in the chat box and try again.");
       return;
     }
     review.editor = live;
     const ok = await typeText(live, masked);
+    // Re-resolve in case typeText found a fresh editor node during re-render.
+    live = liveEditor();
+    review.editor = live;
     state.lastMaskedText = masked;
     const replacements = review.items.map((it) => ({
       type: it.type,
@@ -572,7 +602,7 @@
     renderPanel();
     setActiveTab("message");
     updateFooter();
-    live.focus();
+    if (live) live.focus();
   }
 
   /**
@@ -595,10 +625,13 @@
         setTimeout(attempt, 50);
         return;
       }
-      // Fallback: synthetic Enter on the editor.
+      // Fallback: synthetic Enter on the editor. Prefer a freshly-resolved
+      // editor over the possibly-detached captured reference.
+      const live = (document.contains(editor) ? editor : null) || findEditor();
+      if (!live) return;
       bypassNext = true;
-      editor.focus();
-      editor.dispatchEvent(
+      live.focus();
+      live.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "Enter",
           code: "Enter",
@@ -1070,6 +1103,15 @@
       .replace(/>/g, "&gt;");
   }
 
+  /** Show a brief error banner so the user sees failures without opening DevTools. */
+  function showErrorToast(msg) {
+    const t = document.createElement("div");
+    t.className = "guardai-toast guardai-toast--error";
+    t.textContent = "\u26A0\uFE0F GuardAI: " + msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 6000);
+  }
+
   /* ------------------------------------------------------------------ *
    * "Did we miss anything?" review — lives in the side panel.
    * On send we auto-mask everything detected and type the masked text into the
@@ -1192,15 +1234,17 @@
     };
     wrap.querySelector(".guardai-prompt__btn--send").onclick = () => {
       dismissMaskPrompt();
-      doMaskAndSend(editor, text, findings).catch((err) =>
-        console.error("[GuardAI] Mask & Send failed:", err)
-      );
+      doMaskAndSend(editor, text, findings).catch((err) => {
+        console.error("[GuardAI] Mask & Send failed:", err);
+        showErrorToast("Mask & Send failed — please reload the page and try again.");
+      });
     };
     wrap.querySelector(".guardai-prompt__btn--edit").onclick = () => {
       dismissMaskPrompt();
-      doMaskAndEdit(editor, text, findings).catch((err) =>
-        console.error("[GuardAI] Mask & Edit failed:", err)
-      );
+      doMaskAndEdit(editor, text, findings).catch((err) => {
+        console.error("[GuardAI] Mask & Edit failed:", err);
+        showErrorToast("Mask & Edit failed — please reload the page and try again.");
+      });
     };
 
     // Centre the popup horizontally and place it slightly above the middle of
