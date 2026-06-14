@@ -214,7 +214,8 @@
   function findEditor() {
     for (const sel of CONFIG.editor) {
       const el = document.querySelector(sel);
-      if (el) return el;
+      // Never return one of our own panel/overlay elements as the chat editor.
+      if (el && !el.closest(".guardai-panel, .guardai-prompt")) return el;
     }
     return null;
   }
@@ -503,7 +504,12 @@
     await buildReviewModel(editor, original, findings);
     await registerReviewItems();
     const masked = computeMasked();
-    const live = liveEditor();
+    let live = liveEditor();
+    if (!live) {
+      // One retry after a short settle — the page may still be updating.
+      await delay(120);
+      live = liveEditor();
+    }
     if (!live) {
       console.error("[GuardAI] No editor found to type masked text into.");
       return;
@@ -538,7 +544,12 @@
     await buildReviewModel(editor, original, findings);
     await registerReviewItems();
     const masked = computeMasked();
-    const live = liveEditor();
+    let live = liveEditor();
+    if (!live) {
+      // One retry after a short settle — the page may still be updating.
+      await delay(120);
+      live = liveEditor();
+    }
     if (!live) {
       console.error("[GuardAI] No editor found to type masked text into.");
       return;
@@ -771,9 +782,11 @@
     msgEditableEl.addEventListener("mouseup", msgHandleSelection);
     msgEditableEl.addEventListener("mouseover", msgMarkHover);
     msgApplyEl.onclick = applyMessageEdits;
-    msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
-      b.onclick = () => setMsgView(b.getAttribute("data-msgview"));
-    });
+    if (msgViewTabsEl) {
+      msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
+        b.onclick = () => setMsgView(b.getAttribute("data-msgview"));
+      });
+    }
     panelEl.querySelector(".guardai-panel__close").onclick = closePanel;
     panelEl.querySelector(".guardai-panel__switch").onclick = () =>
       setAutoRestore(!state.autoRestore);
@@ -1179,11 +1192,15 @@
     };
     wrap.querySelector(".guardai-prompt__btn--send").onclick = () => {
       dismissMaskPrompt();
-      doMaskAndSend(editor, text, findings);
+      doMaskAndSend(editor, text, findings).catch((err) =>
+        console.error("[GuardAI] Mask & Send failed:", err)
+      );
     };
     wrap.querySelector(".guardai-prompt__btn--edit").onclick = () => {
       dismissMaskPrompt();
-      doMaskAndEdit(editor, text, findings);
+      doMaskAndEdit(editor, text, findings).catch((err) =>
+        console.error("[GuardAI] Mask & Edit failed:", err)
+      );
     };
 
     // Centre the popup horizontally and place it slightly above the middle of
@@ -1202,12 +1219,14 @@
     };
   }
 
-  /** Centre horizontally, sit slightly above the vertical middle, clamped. */
+  /** Centre horizontally, sit at ~1/3 from the top of the viewport, clamped. */
   function centrePrompt(el) {
     const w = el.offsetWidth || 400;
     const h = el.offsetHeight || 320;
     let left = (window.innerWidth - w) / 2;
-    let top = window.innerHeight / 2 - h / 2 - window.innerHeight * 0.08;
+    // Position the TOP of the popup at 1/3 of the viewport height, so the user
+    // can still see their message in the input below it.
+    let top = Math.round(window.innerHeight / 3) - Math.round(h / 4);
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
     top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
     el.style.left = left + "px";
