@@ -191,8 +191,7 @@
   }
 
   function detectPhone(text, out) {
-    // Fuzzy AU phone: +61 / 61 / 0 prefix followed by 9 more digits in any
-    // separator layout (none, spaces, dashes, dots, or mixed). Normalise then validate.
+    // 1) Standard AU: +61 / 61 / 0 prefix + 9 more digits in any separator layout.
     const re = /(?:\+?61|\b0)(?:[\s.-]?\d){9}\b/g;
     let m;
     while ((m = re.exec(text))) {
@@ -209,6 +208,33 @@
       // Valid AU national number: exactly 10 digits, leading 0 then 2-9.
       if (national.length === 10 && /^0[2-9]\d{8}$/.test(national)) {
         out.push(finding("PHONE", "Phone number", raw.trim(), m.index, "medium"));
+      }
+    }
+
+    // 2) AU service numbers: 1300 / 1800 / 1900 XXXXXX (10 digits).
+    const serviceRe = /\b(1[389]00[\s.-]?\d{3}[\s.-]?\d{3})\b/g;
+    while ((m = serviceRe.exec(text))) {
+      out.push(finding("PHONE", "Phone number", m[1].trim(), m.index, "medium"));
+    }
+
+    // 3) Context-triggered: any 7–12 digit number near phone keywords — catches
+    //    unusual formats (e.g. "1414 376 274"), international numbers, or numbers
+    //    the user explicitly labels as a phone/mobile/contact number.
+    const PHONE_CTX = [
+      "phone", "mobile", "cell", "call me", "contact", "number is",
+      "reach me", "ring", "text me", "sms", "fax",
+    ];
+    const ctxRe = /\b(\d[\d\s.\-()\[\]]{5,18}\d)\b/g;
+    while ((m = ctxRe.exec(text))) {
+      const digits = m[1].replace(/\D/g, "");
+      if (digits.length < 7 || digits.length > 12) continue;
+      // Skip anything already captured as a phone.
+      const start = m.index;
+      const end = start + m[1].length;
+      if (out.some((f) => f.type === "PHONE" && f.index <= start && end <= f.index + f.value.length))
+        continue;
+      if (near(text, start, end, PHONE_CTX, 45)) {
+        out.push(finding("PHONE", "Phone number", m[1].trim(), start, "medium"));
       }
     }
   }
@@ -464,8 +490,19 @@
     "visa", "ssn", "pension", "centrelink", "ndis", "ihi", "ahpra",
     "number", "card", "id", "identifier",
   ]);
+  // Explicit self-introduction phrases that make a capitalised word pair a clear
+  // name even when no other identifier is present in the message.
+  const NAME_INTRO_PHRASES = [
+    "my name is", "name is", "i am", "i'm", "im ", "call me", "i'm called",
+    "my name's", "this is", "i go by",
+  ];
+
   function detectNames(text, out, hasIdentifier) {
-    if (!hasIdentifier) return;
+    // Also detect when the user explicitly introduces themselves, even in a short
+    // message with no other identifier (e.g. "my name is John Smith").
+    const lc = text.toLowerCase();
+    const hasNameCtx = NAME_INTRO_PHRASES.some((p) => lc.includes(p));
+    if (!hasIdentifier && !hasNameCtx) return;
     const re = /\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/g;
     const STOPWORDS = new Set([
       "Hi", "Hello", "Dear", "Thanks", "Thank", "Kind", "Best", "The", "This",
