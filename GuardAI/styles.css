@@ -544,6 +544,31 @@
   margin-bottom: 14px;
   padding: 0 2px;
 }
+/* ---- Drag handle / grip ---- */
+.guardai-prompt__grip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 16px;
+  margin: -4px 0 6px;
+  cursor: grab;
+  user-select: none;
+}
+.guardai-prompt__grip::before {
+  content: "";
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: #4a4a4a;
+  transition: background 0.15s;
+}
+.guardai-prompt__grip:hover::before { background: #6a6a6a; }
+.guardai-prompt__head { cursor: grab; }
+.guardai-prompt--dragging,
+.guardai-prompt--dragging .guardai-prompt__grip,
+.guardai-prompt--dragging .guardai-prompt__head { cursor: grabbing; }
+.guardai-prompt--dragging { box-shadow: 0 28px 72px rgba(0, 0, 0, 0.7); }
+
 .guardai-prompt__shield { font-size: 18px; }
 .guardai-prompt__text { font-size: 14px; font-weight: 600; color: #f4f4f5; flex: 1; }
 .guardai-prompt__btns { display: flex; gap: 10px; }

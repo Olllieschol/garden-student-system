@@ -1119,6 +1119,7 @@
       .join("");
 
     wrap.innerHTML =
+      `<div class="guardai-prompt__grip" title="Drag to move" aria-label="Drag to move"></div>` +
       `<div class="guardai-prompt__head">` +
       `<span class="guardai-prompt__shield">&#128737;</span>` +
       `<span class="guardai-prompt__text">GuardAI detected sensitive data</span>` +
@@ -1163,27 +1164,86 @@
       doMaskAndEdit(editor, text, findings);
     };
 
-    positionPromptAbove(wrap, editor);
-    const reposition = () => positionPromptAbove(wrap, editor);
+    // Centre the popup horizontally and place it slightly above the middle of
+    // the viewport, so it's always fully visible no matter where the input is.
+    centrePrompt(wrap);
+    makePromptDraggable(wrap);
+
+    // Keep it centred on resize — but only until the user drags it, after which
+    // it stays exactly where they put it for the rest of the session.
+    const reposition = () => {
+      if (!wrap._dragged) centrePrompt(wrap);
+    };
     window.addEventListener("resize", reposition, true);
-    window.addEventListener("scroll", reposition, true);
     wrap._cleanup = () => {
       window.removeEventListener("resize", reposition, true);
-      window.removeEventListener("scroll", reposition, true);
     };
   }
 
-  function positionPromptAbove(el, editor) {
-    const ref = editor && document.contains(editor) ? editor : findEditor();
-    if (!ref) return;
-    const r = ref.getBoundingClientRect();
-    const w = el.offsetWidth || 380;
-    let left = r.left + r.width / 2 - w / 2;
+  /** Centre horizontally, sit slightly above the vertical middle, clamped. */
+  function centrePrompt(el) {
+    const w = el.offsetWidth || 400;
+    const h = el.offsetHeight || 320;
+    let left = (window.innerWidth - w) / 2;
+    let top = window.innerHeight / 2 - h / 2 - window.innerHeight * 0.08;
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-    let top = r.top - (el.offsetHeight || 80) - 12;
-    if (top < 8) top = r.bottom + 12;
+    top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
     el.style.left = left + "px";
     el.style.top = top + "px";
+  }
+
+  /** Let the user drag the popup by its grip/header; it stays where dropped. */
+  function makePromptDraggable(el) {
+    const handles = [
+      el.querySelector(".guardai-prompt__grip"),
+      el.querySelector(".guardai-prompt__head"),
+    ].filter(Boolean);
+    let startX = 0;
+    let startY = 0;
+    let baseLeft = 0;
+    let baseTop = 0;
+
+    const onMove = (e) => {
+      const x = e.touches ? e.touches[0].clientX : e.clientX;
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      let left = baseLeft + (x - startX);
+      let top = baseTop + (y - startY);
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+      el.style.left = left + "px";
+      el.style.top = top + "px";
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove, true);
+      document.removeEventListener("mouseup", onUp, true);
+      document.removeEventListener("touchmove", onMove, true);
+      document.removeEventListener("touchend", onUp, true);
+      el.classList.remove("guardai-prompt--dragging");
+    };
+    const onDown = (e) => {
+      // Don't start a drag from the close button or any control.
+      if (e.target.closest("button, input")) return;
+      const pt = e.touches ? e.touches[0] : e;
+      startX = pt.clientX;
+      startY = pt.clientY;
+      const rect = el.getBoundingClientRect();
+      baseLeft = rect.left;
+      baseTop = rect.top;
+      el._dragged = true;
+      el.classList.add("guardai-prompt--dragging");
+      e.preventDefault();
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("mouseup", onUp, true);
+      document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+      document.addEventListener("touchend", onUp, true);
+    };
+
+    for (const h of handles) {
+      h.addEventListener("mousedown", onDown, true);
+      h.addEventListener("touchstart", onDown, { capture: true, passive: false });
+    }
   }
 
   function dismissMaskPrompt() {
