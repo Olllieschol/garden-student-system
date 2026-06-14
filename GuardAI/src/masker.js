@@ -283,6 +283,18 @@
     }
 
     /**
+     * Forget a real<->fake pair. Used when the user un-masks an item in the
+     * MESSAGE tab before sending, so the real value is restored in the input and
+     * auto-restore won't swap it. Caller is responsible for calling save().
+     */
+    unregister(real) {
+      const entry = this.realToFake.get(real);
+      if (!entry) return;
+      this.realToFake.delete(real);
+      this.fakeToReal.delete(entry.fake);
+    }
+
+    /**
      * Mask text given pre-computed findings from the detector.
      * Returns { masked, replacements } where replacements lists what changed.
      * Replacements are applied from the end of the string backwards so that

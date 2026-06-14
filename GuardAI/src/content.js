@@ -460,6 +460,7 @@
     }
     items.sort((a, b) => a.start - b.start);
     review = { editor, original, items, fakeByReal };
+    msgView = "ai"; // new review always opens on the "What AI sees" editable view
   }
 
   /** Build the masked text by applying the auto-detected items end -> start. */
@@ -647,6 +648,12 @@
   let msgEmptyEl = null;
   let footerSendEl = null;
   let msgApplyEl = null; // "Apply changes" button in the MESSAGE tab
+  let msgRealViewEl = null; // MESSAGE tab "What you see" read-only view
+  let msgViewTabsEl = null; // the "What AI sees / What you see" sub-tab bar
+  let msgView = "ai"; // "ai" = masked (editable) | "you" = original (read-only)
+  let markTipEl = null; // hover tooltip on a mark (Remove mask / Change replacement)
+  let markTipFor = null; // the mark element the tip currently belongs to
+  let markTipHideT = null; // delayed-hide timer for the mark tooltip
   let maskPromptEl = null; // the "Mask & Send / Mask & Edit" bar above the input
 
   async function loadActivity() {
@@ -735,8 +742,13 @@
       `<div class="guardai-panel__list"></div>` +
       `</div>` +
       `<div class="guardai-panel__pane" data-pane="message">` +
+      `<div class="guardai-panel__msgviews" style="display:none">` +
+      `<button class="guardai-panel__msgview guardai-panel__msgview--active" data-msgview="ai">What AI sees</button>` +
+      `<button class="guardai-panel__msgview" data-msgview="you">What you see</button>` +
+      `</div>` +
       `<div class="guardai-panel__msglegend"></div>` +
       `<div class="guardai-panel__editable" contenteditable="true" spellcheck="false"></div>` +
+      `<div class="guardai-panel__readview" style="display:none"></div>` +
       `<button class="guardai-panel__apply" style="display:none">Apply changes</button>` +
       `<div class="guardai-panel__msgempty">Nothing to edit yet. Choose <b>Mask &amp; Edit</b> when GuardAI detects sensitive data and your masked message appears here.</div>` +
       `</div>` +
@@ -753,9 +765,15 @@
     msgEmptyEl = panelEl.querySelector(".guardai-panel__msgempty");
     footerSendEl = panelEl.querySelector(".guardai-panel__send");
     msgApplyEl = panelEl.querySelector(".guardai-panel__apply");
+    msgRealViewEl = panelEl.querySelector(".guardai-panel__readview");
+    msgViewTabsEl = panelEl.querySelector(".guardai-panel__msgviews");
 
     msgEditableEl.addEventListener("mouseup", msgHandleSelection);
+    msgEditableEl.addEventListener("mouseover", msgMarkHover);
     msgApplyEl.onclick = applyMessageEdits;
+    msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
+      b.onclick = () => setMsgView(b.getAttribute("data-msgview"));
+    });
     panelEl.querySelector(".guardai-panel__close").onclick = closePanel;
     panelEl.querySelector(".guardai-panel__switch").onclick = () =>
       setAutoRestore(!state.autoRestore);
@@ -1274,42 +1292,258 @@
     if (!review || !review.items.length) {
       msgEditableEl.innerHTML = "";
       msgEditableEl.style.display = "none";
+      if (msgRealViewEl) {
+        msgRealViewEl.innerHTML = "";
+        msgRealViewEl.style.display = "none";
+      }
+      if (msgViewTabsEl) msgViewTabsEl.style.display = "none";
       if (msgEmptyEl) msgEmptyEl.style.display = "";
       if (msgLegendEl) msgLegendEl.innerHTML = "";
       if (msgApplyEl) msgApplyEl.style.display = "none";
+      hideMarkTip();
       return;
     }
-    msgEditableEl.style.display = "";
     if (msgEmptyEl) msgEmptyEl.style.display = "none";
-    if (msgApplyEl) msgApplyEl.style.display = "";
 
+    // "What AI sees": surrounding real text + marks showing the fake, with the
+    // real value as a small grey caption underneath each mark.
     const out = [];
     let cursor = 0;
     for (const it of positioned) {
       if (it.start > cursor) out.push(escapeHtml(review.original.slice(cursor, it.start)));
-      out.push(markHtml(it.type, it.manual, it.fake));
+      out.push(markHtml(it, "ai"));
       cursor = it.end;
     }
     if (cursor < review.original.length) out.push(escapeHtml(review.original.slice(cursor)));
     // Append any manual (start<0) items that aren't part of the original text run.
     for (const it of review.items) {
-      if (it.start < 0) out.push(" " + markHtml(it.type, it.manual, it.fake));
+      if (it.start < 0) out.push(" " + markHtml(it, "ai"));
     }
     msgEditableEl.innerHTML = out.join("");
+
+    buildReadView();
     renderMsgLegend();
+    applyMsgView();
   }
 
-  function markHtml(type, manual, fake) {
-    const st = markStyle(type, manual);
-    // Keep the real fake as the text content (so innerText sends correctly) and
-    // hide passwords visually with CSS instead of replacing the characters.
-    const secret = type === "PASSWORD" ? " guardai-panel__mark--secret" : "";
+  /**
+   * Build the read-only "What you see" view by transforming the editable's
+   * current DOM: every mark shows its REAL value, with the fake as a small grey
+   * caption underneath. Derived from the editable so it always matches the live
+   * message (including free edits and in-place manual masks).
+   */
+  function buildReadView() {
+    if (!msgRealViewEl || !msgEditableEl) return;
+    const clone = msgEditableEl.cloneNode(true);
+    clone.querySelectorAll(".guardai-panel__mark").forEach((m) => {
+      const real = m.getAttribute("data-real") || "";
+      const fake = m.getAttribute("data-fake") || m.textContent;
+      m.textContent = real;
+      if (m.getAttribute("data-type") === "PASSWORD") {
+        m.removeAttribute("data-sub");
+      } else {
+        m.setAttribute("data-sub", fake);
+      }
+    });
+    msgRealViewEl.innerHTML = clone.innerHTML;
+  }
+
+  /** Switch between the "What AI sees" (editable) and "What you see" views. */
+  function setMsgView(v) {
+    msgView = v === "you" ? "you" : "ai";
+    applyMsgView();
+  }
+
+  /** Apply the current msgView: toggle which view is visible + the sub-tabs. */
+  function applyMsgView() {
+    const hasItems = !!(review && review.items.length);
+    if (msgViewTabsEl) {
+      msgViewTabsEl.style.display = hasItems ? "" : "none";
+      msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
+        b.classList.toggle(
+          "guardai-panel__msgview--active",
+          b.getAttribute("data-msgview") === msgView
+        );
+      });
+    }
+    const showYou = msgView === "you";
+    if (msgEditableEl) msgEditableEl.style.display = hasItems && !showYou ? "" : "none";
+    if (msgRealViewEl) msgRealViewEl.style.display = hasItems && showYou ? "" : "none";
+    // Editing only applies to the "What AI sees" view.
+    if (msgApplyEl) msgApplyEl.style.display = hasItems && !showYou ? "" : "none";
+    hideMarkTip();
+  }
+
+  /**
+   * Build the HTML for a masked item. `view` is "ai" (show the fake, real as the
+   * grey caption) or "you" (show the real, fake as the caption). data-real and
+   * data-fake are always carried so the hover tooltip can act on the item.
+   * innerText still equals the fake in the editable, so sends stay masked.
+   */
+  function markHtml(it, view) {
+    const st = markStyle(it.type, it.manual);
+    const secret = it.type === "PASSWORD" ? " guardai-panel__mark--secret" : "";
+    const main = view === "you" ? it.value : it.fake;
+    const sub = view === "you" ? it.fake : it.value;
+    const subAttr = it.type === "PASSWORD" ? "" : ` data-sub="${escapeHtml(sub)}"`;
     return (
-      `<mark class="guardai-panel__mark${secret}" contenteditable="false" data-type="${escapeHtml(type)}" ` +
-      `style="--mk:${st.color}">` +
-      escapeHtml(fake) +
+      `<mark class="guardai-panel__mark${secret}" contenteditable="false" ` +
+      `data-type="${escapeHtml(it.type)}" data-real="${escapeHtml(it.value)}" ` +
+      `data-fake="${escapeHtml(it.fake)}" style="--mk:${st.color}"${subAttr}>` +
+      escapeHtml(main) +
       `</mark>`
     );
+  }
+
+  /* ---- Hover tooltip: remove a mask or change its replacement ---- */
+
+  /** On hover over a mark in the editable, offer Remove mask / Change replacement. */
+  function msgMarkHover(e) {
+    if (!review) return;
+    const mark = e.target && e.target.closest && e.target.closest(".guardai-panel__mark");
+    if (!mark || !msgEditableEl.contains(mark)) return;
+    showMarkTip(mark);
+  }
+
+  function showMarkTip(mark) {
+    if (markTipFor === mark && markTipEl) {
+      clearTimeout(markTipHideT);
+      return;
+    }
+    hideMarkTip();
+    markTipFor = mark;
+    const tip = document.createElement("div");
+    tip.className = "guardai-review-pop guardai-mark-tip";
+    tip.innerHTML =
+      `<button class="guardai-review-pop__btn" data-act="remove">Remove mask</button>` +
+      `<button class="guardai-review-pop__btn" data-act="change">Change replacement</button>`;
+    document.body.appendChild(tip);
+    markTipEl = tip;
+    tip.querySelector('[data-act="remove"]').onclick = () => removeMark(mark);
+    tip.querySelector('[data-act="change"]').onclick = () => changeMarkUI(mark);
+    tip.addEventListener("mouseenter", () => clearTimeout(markTipHideT));
+    tip.addEventListener("mouseleave", scheduleHideMarkTip);
+    mark.addEventListener("mouseleave", scheduleHideMarkTip);
+    positionMarkTip(tip, mark.getBoundingClientRect());
+  }
+
+  function positionMarkTip(tip, rect) {
+    const w = tip.offsetWidth || 220;
+    let left = rect.left + rect.width / 2 - w / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = rect.top - (tip.offsetHeight || 40) - 8;
+    if (top < 8) top = rect.bottom + 8;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+
+  function scheduleHideMarkTip() {
+    clearTimeout(markTipHideT);
+    markTipHideT = setTimeout(hideMarkTip, 220);
+  }
+
+  function hideMarkTip() {
+    clearTimeout(markTipHideT);
+    if (markTipEl) {
+      markTipEl.remove();
+      markTipEl = null;
+    }
+    markTipFor = null;
+  }
+
+  /** "Remove mask": restore the real value in place and forget the mapping. */
+  async function removeMark(mark) {
+    if (!review || !mark) return;
+    const real = mark.getAttribute("data-real");
+    const oldFake = mark.getAttribute("data-fake") || mark.textContent;
+    hideMarkTip();
+    // Restore the real text where the mark was.
+    if (mark.parentNode) {
+      mark.parentNode.replaceChild(document.createTextNode(real), mark);
+    }
+    // Drop one matching item from the model.
+    const i = review.items.findIndex((it) => it.value === real);
+    if (i >= 0) review.items.splice(i, 1);
+    // If nothing else uses this value, forget the mapping entirely.
+    if (!review.items.some((it) => it.value === real)) {
+      if (review.fakeByReal) review.fakeByReal.delete(real);
+      masker.unregister(real);
+      await masker.save();
+    }
+    removeActivityByFake(oldFake);
+    buildReadView();
+    renderMsgLegend();
+    renderPanel();
+    await syncLiveInput();
+  }
+
+  /** "Change replacement": swap the tooltip for an input to type a new fake. */
+  function changeMarkUI(mark) {
+    if (!markTipEl) showMarkTip(mark);
+    const tip = markTipEl;
+    if (!tip) return;
+    clearTimeout(markTipHideT);
+    const current = mark.getAttribute("data-fake") || mark.textContent;
+    tip.innerHTML =
+      `<input class="guardai-review-pop__input" type="text" placeholder="New replacement" />` +
+      `<button class="guardai-review-pop__btn guardai-review-pop__go" data-act="go">Apply</button>`;
+    const input = tip.querySelector(".guardai-review-pop__input");
+    input.value = current;
+    const commit = () => {
+      const v = input.value.trim();
+      if (v) applyMarkChange(mark, v);
+    };
+    tip.querySelector('[data-act="go"]').onclick = commit;
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hideMarkTip();
+      }
+    });
+    input.focus();
+    input.select();
+    positionMarkTip(tip, mark.getBoundingClientRect());
+  }
+
+  /** Re-point a mark to a new fake value and refresh everything that shows it. */
+  async function applyMarkChange(mark, newFake) {
+    if (!review || !mark) return;
+    const real = mark.getAttribute("data-real");
+    const type = mark.getAttribute("data-type") || "CUSTOM";
+    const oldFake = mark.getAttribute("data-fake") || mark.textContent;
+    hideMarkTip();
+    if (newFake === oldFake) return;
+    masker.unregister(real);
+    masker.registerManual(real, newFake, type);
+    await masker.save();
+    // Update the live mark in the editable.
+    mark.textContent = newFake;
+    mark.setAttribute("data-fake", newFake);
+    if (type !== "PASSWORD") mark.setAttribute("data-sub", real);
+    // Update the model + the MASKED tab.
+    for (const it of review.items) {
+      if (it.value === real) it.fake = newFake;
+    }
+    if (review.fakeByReal) review.fakeByReal.set(real, newFake);
+    removeActivityByFake(oldFake);
+    logActivity("mask", [{ type, real, fake: newFake }]);
+    buildReadView();
+    renderMsgLegend();
+    renderPanel();
+    await syncLiveInput();
+  }
+
+  /** Remove the MASKED-tab activity entries for a fake (when un/re-masking). */
+  function removeActivityByFake(fake) {
+    const gone = activityLog.filter((e) => e.kind === "mask" && e.fake === fake);
+    if (!gone.length) return;
+    activityLog = activityLog.filter((e) => !(e.kind === "mask" && e.fake === fake));
+    for (const e of gone) loggedKeys.delete(e.kind + "|" + e.fake + "|" + e.real);
+    persistActivity();
   }
 
   function renderMsgLegend() {
@@ -1445,6 +1679,9 @@
       "guardai-panel__mark" + (type === "PASSWORD" ? " guardai-panel__mark--secret" : "");
     mark.setAttribute("contenteditable", "false");
     mark.setAttribute("data-type", type);
+    mark.setAttribute("data-real", real);
+    mark.setAttribute("data-fake", fake);
+    if (type !== "PASSWORD") mark.setAttribute("data-sub", real); // grey original underneath
     mark.style.setProperty("--mk", st.color);
     mark.textContent = fake; // real fake stays; CSS hides passwords visually
 
@@ -1465,6 +1702,7 @@
     review.items.push({ start: -1, end: -1, value: real, type, manual: true, fake });
     review.fakeByReal.set(real, fake);
     logActivity("mask", [{ type, real, fake }]); // shows in the MASKED tab
+    buildReadView(); // keep "What you see" in sync with the new manual mask
     renderMsgLegend();
     renderPanel();
     await syncLiveInput(); // reflect the change in the chat input immediately

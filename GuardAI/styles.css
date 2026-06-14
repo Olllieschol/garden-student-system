@@ -446,7 +446,36 @@
   border-radius: 50%;
   display: inline-block;
 }
-.guardai-panel__editable {
+/* "What AI sees" / "What you see" sub-tab toggle inside the MESSAGE tab. */
+.guardai-panel__msgviews {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 11px;
+}
+.guardai-panel__msgview {
+  flex: 1;
+  background: transparent;
+  color: #9a9a9f;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.guardai-panel__msgview:hover { color: #d4d4d8; }
+.guardai-panel__msgview--active {
+  background: #2e2e2e;
+  color: #f4f4f5;
+}
+.guardai-panel__editable,
+.guardai-panel__readview {
   min-height: 140px;
   padding: 16px 18px;
   background: #161616;
@@ -460,6 +489,8 @@
   outline: none;
   transition: border-color 0.15s;
 }
+.guardai-panel__readview { line-height: 2.2; }
+.guardai-panel__readview .guardai-panel__mark { cursor: default; }
 .guardai-panel__editable:focus { border-color: #4a4a4a; }
 .guardai-panel__apply {
   width: 100%;
@@ -487,6 +518,24 @@
   border-radius: 6px;
   padding: 1px 5px;
   font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Marks with a caption stack the original/replacement underneath in small grey. */
+.guardai-panel__mark[data-sub] {
+  display: inline-block;
+  text-align: center;
+  line-height: 1.2;
+  vertical-align: -0.35em;
+  padding-bottom: 2px;
+}
+.guardai-panel__mark[data-sub]::after {
+  content: attr(data-sub);
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 400;
+  color: #8a8a8f;
   white-space: nowrap;
 }
 /* Passwords keep their real fake as text (so it sends correctly) but render as dots. */
