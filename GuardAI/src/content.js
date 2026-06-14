@@ -433,12 +433,13 @@
    * GuardAI never reads or writes the system clipboard, so a value the user
    * copied stays intact for their next paste.
    * ------------------------------------------------------------------ */
-  async function maskAndReview(editor, original, findings) {
+  /**
+   * Seed the review model from the maskable auto-detected findings. The detector
+   * has already resolved overlaps; warning-only findings can still be masked
+   * manually later from the MESSAGE tab.
+   */
+  async function buildReviewModel(editor, original, findings) {
     await masker.load();
-
-    // Seed the review with the maskable auto-detected findings (the detector
-    // already resolves overlaps). Warning-only findings can still be masked
-    // manually from the panel.
     const fakeByReal = new Map();
     const items = [];
     for (const f of findings) {
@@ -458,35 +459,16 @@
       });
     }
     items.sort((a, b) => a.start - b.start);
-
-    review = { editor, original, items, fakeByReal, pendingSel: null, popEl: null };
-
-    await applyReview(); // register + type the masked text into the input
-
-    // Surface the review in the side panel (open it if the user had collapsed it).
-    panelClosed = false;
-    ensurePanel();
-    if (reopenEl) reopenEl.style.display = "none";
-    renderReviewSection();
-    renderPanel();
+    review = { editor, original, items, fakeByReal };
   }
 
-  /**
-   * Build the masked text from the current review items, type it into the live
-   * input field, and log the masks. Re-runnable: called once on send and again
-   * after each manual mask so the input updates in real time. logActivity
-   * dedupes, so re-runs only add newly-masked items to the log.
-   */
-  async function applyReview() {
-    if (!review) return;
-    const original = review.original;
-    const ordered = review.items.slice().sort((a, b) => a.start - b.start);
-
-    for (const it of ordered) masker.registerManual(it.value, it.fake, it.type);
-    await masker.save();
-
-    let masked = original;
-    const replacements = [];
+  /** Build the masked text by applying the auto-detected items end -> start. */
+  function computeMasked() {
+    if (!review) return "";
+    let masked = review.original;
+    const ordered = review.items
+      .filter((it) => it.start >= 0)
+      .sort((a, b) => a.start - b.start);
     for (let i = ordered.length - 1; i >= 0; i--) {
       const it = ordered[i];
       if (masked.slice(it.start, it.end) === it.value) {
@@ -494,25 +476,91 @@
       } else {
         masked = masked.split(it.value).join(it.fake);
       }
-      replacements.push({ type: it.type, real: it.value, fake: it.fake });
     }
+    return masked;
+  }
 
-    // Re-resolve a live editor: the stored node may have been detached by a
-    // React re-render between the original send and a later manual edit.
-    const editor =
-      review.editor && document.contains(review.editor) ? review.editor : findEditor();
-    if (!editor) {
+  /** Register every review item as a committed real<->fake pair and persist. */
+  async function registerReviewItems() {
+    if (!review) return;
+    for (const it of review.items) masker.registerManual(it.value, it.fake, it.type);
+    await masker.save();
+  }
+
+  /** Re-resolve a live editor (the stored node may have been detached by React). */
+  function liveEditor() {
+    return review && review.editor && document.contains(review.editor)
+      ? review.editor
+      : findEditor();
+  }
+
+  /**
+   * "Mask & Send": mask everything detected, type it into the input, log it,
+   * surface the MESSAGE tab, then send immediately — no editing step.
+   */
+  async function doMaskAndSend(editor, original, findings) {
+    await buildReviewModel(editor, original, findings);
+    await registerReviewItems();
+    const masked = computeMasked();
+    const live = liveEditor();
+    if (!live) {
       console.error("[GuardAI] No editor found to type masked text into.");
       return;
     }
-    review.editor = editor;
-
-    const ok = await typeText(editor, masked);
-    // Remember what we typed so the user's own send isn't re-scanned/re-masked.
+    review.editor = live;
+    const ok = await typeText(live, masked);
     state.lastMaskedText = masked;
+    const replacements = review.items.map((it) => ({
+      type: it.type,
+      real: it.value,
+      fake: it.fake,
+    }));
     logActivity("mask", replacements);
     if (ok) reportStats({ masked: replacements.length });
-    editor.focus();
+    editMode = false;
+    panelClosed = false;
+    ensurePanel();
+    if (reopenEl) reopenEl.style.display = "none";
+    renderMessageTab();
+    renderPanel();
+    updateFooter();
+    live.focus();
+    triggerSend(live);
+  }
+
+  /**
+   * "Mask & Edit": mask everything, type it into the input, then open the
+   * MESSAGE tab with the masked message in an editable box. A footer Send
+   * button appears; the user edits freely and sends when ready.
+   */
+  async function doMaskAndEdit(editor, original, findings) {
+    await buildReviewModel(editor, original, findings);
+    await registerReviewItems();
+    const masked = computeMasked();
+    const live = liveEditor();
+    if (!live) {
+      console.error("[GuardAI] No editor found to type masked text into.");
+      return;
+    }
+    review.editor = live;
+    const ok = await typeText(live, masked);
+    state.lastMaskedText = masked;
+    const replacements = review.items.map((it) => ({
+      type: it.type,
+      real: it.value,
+      fake: it.fake,
+    }));
+    logActivity("mask", replacements);
+    if (ok) reportStats({ masked: replacements.length });
+    editMode = true;
+    panelClosed = false;
+    ensurePanel();
+    if (reopenEl) reopenEl.style.display = "none";
+    renderMessageTab();
+    renderPanel();
+    setActiveTab("message");
+    updateFooter();
+    live.focus();
   }
 
   /**
@@ -587,14 +635,18 @@
   let activitySeq = 1; // monotonic id for entries (lets Reveal target one row)
   const loggedKeys = new Set(); // dedupe so re-renders don't double-log
   let panelEl = null;
-  let panelListEl = null;
+  let maskedListEl = null; // MASKED tab: the activity-log list
   let reopenEl = null;
   let panelClosed = false; // user explicitly closed the panel this session
-  // "Did we miss anything?" review section (created with the panel).
-  let reviewSectionEl = null;
-  let reviewBodyEl = null;
-  let reviewLegendEl = null;
-  let reviewCountEl = null;
+  let activeTab = "masked"; // "masked" | "message"
+  let editMode = false; // a Mask & Edit is in progress -> show the panel Send button
+  // MESSAGE tab elements (created with the panel).
+  let msgPaneEl = null;
+  let msgEditableEl = null;
+  let msgLegendEl = null;
+  let msgEmptyEl = null;
+  let footerSendEl = null;
+  let maskPromptEl = null; // the "Mask & Send / Mask & Edit" bar above the input
 
   async function loadActivity() {
     try {
@@ -663,10 +715,9 @@
     panelEl.innerHTML =
       `<div class="guardai-panel__header">` +
       `<span class="guardai-panel__shield">&#128737;</span>` +
-      `<span class="guardai-panel__title">GuardAI activity</span>` +
+      `<span class="guardai-panel__title">GuardAI</span>` +
       `<button class="guardai-panel__close" title="Close" aria-label="Close">&times;</button>` +
       `</div>` +
-      `<div class="guardai-panel__sub">Real data stays on this device. Only masked values are sent to the AI.</div>` +
       `<div class="guardai-panel__toggle">` +
       `<div class="guardai-panel__toggletext">` +
       `<span class="guardai-panel__togglelabel">Auto-restore</span>` +
@@ -674,34 +725,43 @@
       `</div>` +
       `<button class="guardai-panel__switch" role="switch"></button>` +
       `</div>` +
-      `<div class="guardai-panel__review" style="display:none">` +
-      `<div class="guardai-panel__reviewhead">` +
-      `<span class="guardai-panel__reviewtitle">Did we miss anything?</span>` +
-      `<span class="guardai-panel__reviewcount"></span>` +
+      `<div class="guardai-panel__tabs" role="tablist">` +
+      `<button class="guardai-panel__tab guardai-panel__tab--active" data-tab="masked" role="tab">Masked</button>` +
+      `<button class="guardai-panel__tab" data-tab="message" role="tab">Message</button>` +
       `</div>` +
-      `<div class="guardai-panel__reviewhint">Select any text we missed to mask it.</div>` +
-      `<div class="guardai-panel__reviewlegend"></div>` +
-      `<div class="guardai-panel__reviewbody" tabindex="0"></div>` +
+      `<div class="guardai-panel__body">` +
+      `<div class="guardai-panel__pane guardai-panel__pane--active" data-pane="masked">` +
+      `<div class="guardai-panel__list"></div>` +
       `</div>` +
-      `<div class="guardai-panel__actions">` +
-      `<button class="guardai-panel__action" data-act="clear-log">Clear all</button>` +
-      `<button class="guardai-panel__action guardai-panel__action--danger" data-act="clear-session">Clear session</button>` +
+      `<div class="guardai-panel__pane" data-pane="message">` +
+      `<div class="guardai-panel__msglegend"></div>` +
+      `<div class="guardai-panel__editable" contenteditable="true" spellcheck="false"></div>` +
+      `<div class="guardai-panel__msgempty">Nothing to edit yet. Choose <b>Mask &amp; Edit</b> when GuardAI detects sensitive data and your masked message appears here.</div>` +
       `</div>` +
-      `<div class="guardai-panel__list"></div>`;
+      `</div>` +
+      `<div class="guardai-panel__footer">` +
+      `<button class="guardai-panel__send" style="display:none">Send</button>` +
+      `<button class="guardai-panel__clear">Clear session</button>` +
+      `</div>`;
     document.body.appendChild(panelEl);
-    panelListEl = panelEl.querySelector(".guardai-panel__list");
-    reviewSectionEl = panelEl.querySelector(".guardai-panel__review");
-    reviewBodyEl = panelEl.querySelector(".guardai-panel__reviewbody");
-    reviewLegendEl = panelEl.querySelector(".guardai-panel__reviewlegend");
-    reviewCountEl = panelEl.querySelector(".guardai-panel__reviewcount");
-    reviewBodyEl.addEventListener("mouseup", reviewHandleSelection);
+    maskedListEl = panelEl.querySelector(".guardai-panel__list");
+    msgPaneEl = panelEl.querySelector('[data-pane="message"]');
+    msgEditableEl = panelEl.querySelector(".guardai-panel__editable");
+    msgLegendEl = panelEl.querySelector(".guardai-panel__msglegend");
+    msgEmptyEl = panelEl.querySelector(".guardai-panel__msgempty");
+    footerSendEl = panelEl.querySelector(".guardai-panel__send");
+
+    msgEditableEl.addEventListener("mouseup", msgHandleSelection);
     panelEl.querySelector(".guardai-panel__close").onclick = closePanel;
     panelEl.querySelector(".guardai-panel__switch").onclick = () =>
       setAutoRestore(!state.autoRestore);
-    panelEl.querySelector('[data-act="clear-log"]').onclick = clearActivityLog;
-    panelEl.querySelector('[data-act="clear-session"]').onclick = clearSession;
+    panelEl.querySelectorAll(".guardai-panel__tab").forEach((tab) => {
+      tab.onclick = () => setActiveTab(tab.getAttribute("data-tab"));
+    });
+    footerSendEl.onclick = panelSend;
+    panelEl.querySelector(".guardai-panel__clear").onclick = clearSession;
     // Delegate "Reveal real data" clicks for pending rows.
-    panelListEl.addEventListener("click", (e) => {
+    maskedListEl.addEventListener("click", (e) => {
       const btn = e.target.closest(".guardai-panel__reveal");
       if (!btn) return;
       const id = Number(btn.getAttribute("data-id"));
@@ -713,6 +773,9 @@
       }
     });
     syncAutoRestoreSwitch();
+    setActiveTab(activeTab);
+    renderMessageTab();
+    updateFooter();
   }
 
   /** Reflect state.autoRestore on the panel switch (if the panel exists). */
@@ -795,7 +858,7 @@
         panelClosed = false;
         reopenEl.style.display = "none";
         ensurePanel();
-        renderReviewSection();
+        renderMessageTab();
         renderPanel();
       };
       document.body.appendChild(reopenEl);
@@ -805,15 +868,15 @@
   }
 
   function renderPanel() {
-    if (!panelListEl) return;
+    if (!maskedListEl) return;
     if (!activityLog.length) {
-      panelListEl.innerHTML =
+      maskedListEl.innerHTML =
         `<div class="guardai-panel__empty">No activity yet. When you mask data or ` +
         `GuardAI restores a response, it appears here.</div>`;
       return;
     }
     // Newest first, capped to the most recent 20 so the log never stacks endlessly.
-    panelListEl.innerHTML = activityLog
+    maskedListEl.innerHTML = activityLog
       .slice(-20)
       .reverse()
       .map((it) => {
@@ -876,11 +939,10 @@
     if (!text) return true;
 
     // If this is the exact masked text we just typed in, the user is sending
-    // it themselves — let it through untouched (don't re-scan/re-mask), and
-    // clear the review now that the masked message is on its way.
+    // it themselves — let it through untouched (don't re-scan/re-mask). The
+    // review persists so the MESSAGE tab still reflects what was sent.
     if (state.lastMaskedText && normalize(text) === normalize(state.lastMaskedText)) {
       state.lastMaskedText = null;
-      clearReview();
       return true;
     }
 
@@ -891,11 +953,11 @@
 
     reportStats({ detected: findings.length });
 
-    // Auto-mask everything detected, type it into the input, and surface a
-    // "Did we miss anything?" review in the side panel. The user reviews and
-    // presses send themselves.
-    await maskAndReview(editor, text, findings);
-    return false; // we typed; nothing to send automatically
+    // Offer the choice: "Mask & Send" (mask + send now) or "Mask & Edit"
+    // (mask, then edit in the MESSAGE tab before sending). Either way we block
+    // this raw send.
+    showMaskPrompt(editor, text, findings);
+    return false;
   }
 
   /** Programmatically trigger the site's send (Enter on the editor). */
@@ -983,152 +1045,203 @@
    * sent automatically. Detection, masking and auto-restore are reused as-is.
    * ------------------------------------------------------------------ */
   const MARK_STYLE = {
-    NAME_PII: { label: "Name", color: "#58a6ff" },
-    PHONE: { label: "Phone", color: "#f0883e" },
-    EMAIL: { label: "Email", color: "#3fb950" },
-    ADDRESS: { label: "Address", color: "#bc8cff" },
-    DOB: { label: "Date of birth", color: "#e3b341" },
-    PASSPORT: { label: "Passport", color: "#e3b341" },
-    LICENCE: { label: "Licence", color: "#e3b341" },
-    MEDICARE: { label: "Medicare", color: "#e3b341" },
-    TFN: { label: "TFN", color: "#e3b341" },
-    CREDIT_CARD: { label: "Card number", color: "#e3b341" },
-    BSB: { label: "BSB", color: "#e3b341" },
-    BANK_ACCOUNT: { label: "Bank account", color: "#e3b341" },
-    MONEY: { label: "Amount", color: "#e3b341" },
-    GPS: { label: "GPS", color: "#e3b341" },
-    ABN: { label: "ABN", color: "#e3b341" },
-    ACN: { label: "ACN", color: "#e3b341" },
-    PASSWORD: { label: "Password", color: "#f85149" },
+    NAME_PII: { label: "Name", color: "#6B9FFF" },
+    PHONE: { label: "Phone", color: "#FF8C42" },
+    EMAIL: { label: "Email", color: "#4CAF82" },
+    ADDRESS: { label: "Address", color: "#B06FFF" },
+    DOB: { label: "Date of birth", color: "#FFD166" },
+    PASSPORT: { label: "Passport", color: "#FF6B6B" },
+    LICENCE: { label: "Licence", color: "#FF6B6B" },
+    MEDICARE: { label: "Medicare", color: "#FF6B6B" },
+    TFN: { label: "TFN", color: "#FF6B6B" },
+    CREDIT_CARD: { label: "Card number", color: "#FF6B6B" },
+    BSB: { label: "BSB", color: "#FF6B6B" },
+    BANK_ACCOUNT: { label: "Bank account", color: "#FF6B6B" },
+    MONEY: { label: "Amount", color: "#FFD166" },
+    GPS: { label: "GPS", color: "#B06FFF" },
+    ABN: { label: "ABN", color: "#FF6B6B" },
+    ACN: { label: "ACN", color: "#FF6B6B" },
+    PASSWORD: { label: "Password", color: "#FF6B6B" },
   };
-  const MARK_DEFAULT = { label: "Sensitive", color: "#e3b341" };
-  const MARK_MANUAL = { label: "Manual", color: "#ff7b9c" };
+  const MARK_DEFAULT = { label: "Sensitive", color: "#FFD166" };
+  const MARK_MANUAL = { label: "Manual", color: "#FF8FB1" };
 
-  // Active review state: { editor, original, items[], fakeByReal, pendingSel, popEl }
-  // items: [{ start, end, value, type, manual, fake }]
+  // Active review state: { editor, original, items[], fakeByReal }.
+  // items: [{ start, end, value, type, manual, fake }]. Items added manually in
+  // the MESSAGE tab use start/end of -1 (their position lives in the DOM).
   let review = null;
+  let msgPending = null; // { range: Range, value: string } awaiting auto/custom replace
+  let msgPop = null; // the auto/custom replace popup element
 
   function markStyle(type, manual) {
     return MARK_STYLE[type] || (manual ? MARK_MANUAL : MARK_DEFAULT);
   }
 
-  /** Get (memoised) the proposed fake for a real value so duplicates align. */
-  function reviewFakeFor(type, value) {
-    if (review.fakeByReal.has(value)) return review.fakeByReal.get(value);
-    const f = masker.previewFake(type, value);
-    review.fakeByReal.set(value, f);
-    return f;
+  /* ---- "Mask & Send / Mask & Edit" prompt above the input ---- */
+
+  function showMaskPrompt(editor, text, findings) {
+    dismissMaskPrompt();
+    const n = findings.length;
+    const bar = document.createElement("div");
+    bar.className = "guardai-prompt";
+    bar.innerHTML =
+      `<div class="guardai-prompt__head">` +
+      `<span class="guardai-prompt__shield">&#128737;</span>` +
+      `<span class="guardai-prompt__text">${
+        n === 1 ? "1 sensitive item detected" : n + " sensitive items detected"
+      }</span>` +
+      `</div>` +
+      `<div class="guardai-prompt__btns">` +
+      `<button class="guardai-prompt__btn guardai-prompt__btn--send">Mask &amp; Send</button>` +
+      `<button class="guardai-prompt__btn guardai-prompt__btn--edit">Mask &amp; Edit</button>` +
+      `</div>`;
+    document.body.appendChild(bar);
+    maskPromptEl = bar;
+
+    bar.querySelector(".guardai-prompt__btn--send").onclick = () => {
+      dismissMaskPrompt();
+      doMaskAndSend(editor, text, findings);
+    };
+    bar.querySelector(".guardai-prompt__btn--edit").onclick = () => {
+      dismissMaskPrompt();
+      doMaskAndEdit(editor, text, findings);
+    };
+
+    positionPromptAbove(bar, editor);
+    const reposition = () => positionPromptAbove(bar, editor);
+    window.addEventListener("resize", reposition, true);
+    window.addEventListener("scroll", reposition, true);
+    bar._cleanup = () => {
+      window.removeEventListener("resize", reposition, true);
+      window.removeEventListener("scroll", reposition, true);
+    };
   }
 
-  /** Show/refresh the "Did we miss anything?" section in the panel. */
-  function renderReviewSection() {
-    if (!reviewSectionEl) return;
-    if (!review) {
-      reviewSectionEl.style.display = "none";
+  function positionPromptAbove(el, editor) {
+    const ref = editor && document.contains(editor) ? editor : findEditor();
+    if (!ref) return;
+    const r = ref.getBoundingClientRect();
+    const w = el.offsetWidth || 360;
+    let left = r.left + r.width / 2 - w / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+    let top = r.top - (el.offsetHeight || 80) - 12;
+    if (top < 8) top = r.bottom + 12;
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  }
+
+  function dismissMaskPrompt() {
+    if (maskPromptEl) {
+      if (maskPromptEl._cleanup) maskPromptEl._cleanup();
+      maskPromptEl.remove();
+      maskPromptEl = null;
+    }
+  }
+
+  /* ---- MESSAGE tab: editable masked message + manual masking ---- */
+
+  /**
+   * Rebuild the editable MESSAGE pane from the review model: plain text from the
+   * original, with each auto-masked item shown as a coloured (non-editable) mark
+   * carrying its fake value. Free typing and manual selection-masks then mutate
+   * this DOM directly; innerText is the source of truth on send.
+   */
+  function renderMessageTab() {
+    if (!msgEditableEl) return;
+    const positioned = review
+      ? review.items.filter((it) => it.start >= 0).sort((a, b) => a.start - b.start)
+      : [];
+    if (!review || !review.items.length) {
+      msgEditableEl.innerHTML = "";
+      msgEditableEl.style.display = "none";
+      if (msgEmptyEl) msgEmptyEl.style.display = "";
+      if (msgLegendEl) msgLegendEl.innerHTML = "";
       return;
     }
-    reviewSectionEl.style.display = "";
+    msgEditableEl.style.display = "";
+    if (msgEmptyEl) msgEmptyEl.style.display = "none";
 
-    // Body: the original message with each masked item wrapped in a colour mark.
-    const items = review.items.slice().sort((a, b) => a.start - b.start);
     const out = [];
     let cursor = 0;
-    for (const it of items) {
-      if (it.start > cursor) {
-        out.push(
-          `<span class="guardai-review-seg" data-start="${cursor}">` +
-            escapeHtml(review.original.slice(cursor, it.start)) +
-            `</span>`
-        );
-      }
-      const st = markStyle(it.type, it.manual);
-      const shown = it.type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : it.value;
-      out.push(
-        `<mark class="guardai-review-mark" data-start="${it.start}" data-type="${escapeHtml(it.type)}" ` +
-          `style="--mk:${st.color}">` +
-          escapeHtml(shown) +
-          `</mark>`
-      );
+    for (const it of positioned) {
+      if (it.start > cursor) out.push(escapeHtml(review.original.slice(cursor, it.start)));
+      out.push(markHtml(it.type, it.manual, it.fake));
       cursor = it.end;
     }
-    if (cursor < review.original.length) {
-      out.push(
-        `<span class="guardai-review-seg" data-start="${cursor}">` +
-          escapeHtml(review.original.slice(cursor)) +
-          `</span>`
-      );
+    if (cursor < review.original.length) out.push(escapeHtml(review.original.slice(cursor)));
+    // Append any manual (start<0) items that aren't part of the original text run.
+    for (const it of review.items) {
+      if (it.start < 0) out.push(" " + markHtml(it.type, it.manual, it.fake));
     }
-    reviewBodyEl.innerHTML = out.join("");
+    msgEditableEl.innerHTML = out.join("");
+    renderMsgLegend();
+  }
 
-    // Count + colour legend.
-    const n = items.length;
-    if (reviewCountEl) reviewCountEl.textContent = n === 1 ? "1 item masked" : `${n} items masked`;
+  function markHtml(type, manual, fake) {
+    const st = markStyle(type, manual);
+    const shown = type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : fake;
+    return (
+      `<mark class="guardai-panel__mark" contenteditable="false" data-type="${escapeHtml(type)}" ` +
+      `style="--mk:${st.color}">` +
+      escapeHtml(shown) +
+      `</mark>`
+    );
+  }
+
+  function renderMsgLegend() {
+    if (!msgLegendEl) return;
     const seen = new Map();
-    for (const it of items) {
-      const st = markStyle(it.type, it.manual);
-      if (!seen.has(st.label)) seen.set(st.label, st.color);
+    if (review) {
+      for (const it of review.items) {
+        const st = markStyle(it.type, it.manual);
+        if (!seen.has(st.label)) seen.set(st.label, st.color);
+      }
     }
-    reviewLegendEl.innerHTML = Array.from(seen.entries())
+    msgLegendEl.innerHTML = Array.from(seen.entries())
       .map(
         ([label, color]) =>
-          `<span class="guardai-review-legend__item">` +
-          `<span class="guardai-review-dot" style="background:${color}"></span>` +
+          `<span class="guardai-panel__legenditem">` +
+          `<span class="guardai-panel__dot" style="background:${color}"></span>` +
           escapeHtml(label) +
           `</span>`
       )
       .join("");
   }
 
-  /** Map a selection boundary (node + offset) to an index in the original text. */
-  function reviewOffset(node, offsetInNode) {
-    let span = node && node.nodeType === 3 ? node.parentElement : node;
-    while (
-      span &&
-      span !== reviewBodyEl &&
-      !(span.getAttribute && span.hasAttribute("data-start"))
-    ) {
-      span = span.parentElement;
-    }
-    if (!span || !span.getAttribute || !span.hasAttribute("data-start")) return null;
-    const base = Number(span.getAttribute("data-start"));
-    if (node.nodeType === 3) return base + offsetInNode;
-    return offsetInNode > 0 ? base + span.textContent.length : base;
-  }
-
-  /** On a selection inside the message, offer to mask the highlighted text. */
-  function reviewHandleSelection() {
-    if (!review) return reviewHidePopup();
+  /** On a selection inside the editable, offer to mask the highlighted text. */
+  function msgHandleSelection() {
+    if (!review || !msgEditableEl) return msgHidePopup();
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return reviewHidePopup();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return msgHidePopup();
     const range = sel.getRangeAt(0);
-    if (!reviewBodyEl.contains(range.commonAncestorContainer)) return reviewHidePopup();
-    let s = reviewOffset(range.startContainer, range.startOffset);
-    let e = reviewOffset(range.endContainer, range.endOffset);
-    if (s == null || e == null) return reviewHidePopup();
-    if (s > e) [s, e] = [e, s];
-    while (s < e && /\s/.test(review.original[s])) s++;
-    while (e > s && /\s/.test(review.original[e - 1])) e--;
-    if (e - s < 1) return reviewHidePopup();
-    // Don't let a selection overlap an item that's already masked.
-    if (review.items.some((it) => !(e <= it.start || s >= it.end))) return reviewHidePopup();
-    review.pendingSel = { start: s, end: e };
-    reviewShowPopup(range.getBoundingClientRect());
+    if (
+      !msgEditableEl.contains(range.startContainer) ||
+      !msgEditableEl.contains(range.endContainer)
+    )
+      return msgHidePopup();
+    // Reject selections that touch an already-masked item.
+    const marks = msgEditableEl.querySelectorAll(".guardai-panel__mark");
+    for (const m of marks) {
+      if (range.intersectsNode(m)) return msgHidePopup();
+    }
+    const value = sel.toString();
+    if (value.trim().length < 1) return msgHidePopup();
+    msgPending = { range: range.cloneRange(), value };
+    msgShowPopup(range.getBoundingClientRect());
   }
 
-  function reviewShowPopup(rect) {
-    reviewHidePopup();
+  function msgShowPopup(rect) {
+    msgHidePopup();
     const pop = document.createElement("div");
     pop.className = "guardai-review-pop";
     pop.innerHTML =
       `<button class="guardai-review-pop__btn" data-act="auto">Auto-replace</button>` +
       `<button class="guardai-review-pop__btn" data-act="custom">Custom replace</button>`;
     document.body.appendChild(pop);
-    review.popEl = pop;
+    msgPop = pop;
+    pop.querySelector('[data-act="auto"]').onclick = msgAutoReplace;
+    pop.querySelector('[data-act="custom"]').onclick = msgCustomReplaceUI;
 
-    pop.querySelector('[data-act="auto"]').onclick = reviewAutoReplace;
-    pop.querySelector('[data-act="custom"]').onclick = reviewCustomReplaceUI;
-
-    // Position above the selection, clamped to the viewport.
     const w = pop.offsetWidth || 220;
     let left = rect.left + rect.width / 2 - w / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
@@ -1138,61 +1251,40 @@
     pop.style.top = top + "px";
   }
 
-  function reviewHidePopup() {
-    if (review && review.popEl) {
-      review.popEl.remove();
-      review.popEl = null;
+  function msgHidePopup() {
+    if (msgPop) {
+      msgPop.remove();
+      msgPop = null;
     }
   }
 
-  /**
-   * Commit a manual mask: add the item, re-mask the input field in real time,
-   * refresh the section, and clear the selection.
-   */
-  async function reviewCommitManual(fake, type) {
-    if (!review || !review.pendingSel) return;
-    const { start, end } = review.pendingSel;
-    const value = review.original.slice(start, end);
-    review.fakeByReal.set(value, fake);
-    review.items.push({ start, end, value, type: type || "MANUAL", manual: true, fake });
-    review.items.sort((a, b) => a.start - b.start);
-    review.pendingSel = null;
-    reviewHidePopup();
-    const sel = window.getSelection();
-    if (sel) sel.removeAllRanges();
-    await applyReview(); // re-type the input with the new mask applied
-    renderReviewSection();
-    renderPanel();
-  }
-
-  function reviewAutoReplace() {
-    if (!review || !review.pendingSel) return;
-    const { start, end } = review.pendingSel;
-    const value = review.original.slice(start, end);
+  function msgAutoReplace() {
+    if (!msgPending) return;
+    const value = msgPending.value.trim();
     let type = "NAME_PII"; // a realistic AU name is the generic fallback
     try {
       const fs = detector.scan(value);
-      const whole = fs.find((f) => masker.isMaskable(f.type) && f.value.trim() === value.trim());
+      const whole = fs.find((f) => masker.isMaskable(f.type) && f.value.trim() === value);
       const any = whole || fs.find((f) => masker.isMaskable(f.type));
       if (any) type = any.type;
     } catch {
       /* fall back to NAME_PII */
     }
-    reviewCommitManual(reviewFakeFor(type, value), type);
+    msgReplaceSelection(masker.previewFake(type, value), type);
   }
 
   /** Swap the popup for a small input so the user can type their own fake. */
-  function reviewCustomReplaceUI() {
-    if (!review || !review.popEl) return;
-    review.popEl.innerHTML =
+  function msgCustomReplaceUI() {
+    if (!msgPop) return;
+    msgPop.innerHTML =
       `<input class="guardai-review-pop__input" type="text" placeholder="Your replacement" />` +
       `<button class="guardai-review-pop__btn guardai-review-pop__go" data-act="go">Mask</button>`;
-    const input = review.popEl.querySelector(".guardai-review-pop__input");
+    const input = msgPop.querySelector(".guardai-review-pop__input");
     const commit = () => {
       const v = input.value.trim();
-      if (v) reviewCommitManual(v, "CUSTOM");
+      if (v) msgReplaceSelection(v, "CUSTOM");
     };
-    review.popEl.querySelector('[data-act="go"]').onclick = commit;
+    msgPop.querySelector('[data-act="go"]').onclick = commit;
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter") {
@@ -1200,17 +1292,105 @@
         commit();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        reviewHidePopup();
+        msgHidePopup();
       }
     });
     input.focus();
   }
 
+  /**
+   * Replace the pending selection in the editable with a coloured mark carrying
+   * the fake, register the real<->fake pair, and log it. The DOM is mutated in
+   * place so the user's other edits are preserved.
+   */
+  async function msgReplaceSelection(fake, type) {
+    if (!review || !msgPending) return;
+    const raw = msgPending.value;
+    const real = raw.trim();
+    const lead = raw.slice(0, raw.indexOf(real));
+    const tail = raw.slice(raw.indexOf(real) + real.length);
+
+    masker.registerManual(real, fake, type);
+    await masker.save();
+
+    const st = markStyle(type, true);
+    const mark = document.createElement("mark");
+    mark.className = "guardai-panel__mark";
+    mark.setAttribute("contenteditable", "false");
+    mark.setAttribute("data-type", type);
+    mark.style.setProperty("--mk", st.color);
+    mark.textContent = type === "PASSWORD" ? "\u2022\u2022\u2022\u2022\u2022\u2022" : fake;
+
+    const frag = document.createDocumentFragment();
+    if (lead) frag.appendChild(document.createTextNode(lead));
+    frag.appendChild(mark);
+    if (tail) frag.appendChild(document.createTextNode(tail));
+
+    const range = msgPending.range;
+    range.deleteContents();
+    range.insertNode(frag);
+
+    const sel = window.getSelection();
+    if (sel) sel.removeAllRanges();
+    msgPending = null;
+    msgHidePopup();
+
+    review.items.push({ start: -1, end: -1, value: real, type, manual: true, fake });
+    review.fakeByReal.set(real, fake);
+    logActivity("mask", [{ type, real, fake }]);
+    renderMsgLegend();
+    renderPanel();
+  }
+
+  /* ---- Tabs, footer, send ---- */
+
+  function setActiveTab(tab) {
+    activeTab = tab === "message" ? "message" : "masked";
+    if (!panelEl) return;
+    panelEl.querySelectorAll(".guardai-panel__tab").forEach((t) => {
+      t.classList.toggle(
+        "guardai-panel__tab--active",
+        t.getAttribute("data-tab") === activeTab
+      );
+    });
+    panelEl.querySelectorAll(".guardai-panel__pane").forEach((p) => {
+      p.classList.toggle(
+        "guardai-panel__pane--active",
+        p.getAttribute("data-pane") === activeTab
+      );
+    });
+  }
+
+  function updateFooter() {
+    if (footerSendEl) footerSendEl.style.display = editMode ? "" : "none";
+  }
+
+  /** Send the (possibly edited) masked message from the MESSAGE tab. */
+  async function panelSend() {
+    const live = liveEditor();
+    if (!live) {
+      console.error("[GuardAI] No editor found to send from.");
+      return;
+    }
+    let finalText = msgEditableEl ? msgEditableEl.innerText : "";
+    finalText = finalText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
+    await typeText(live, finalText);
+    state.lastMaskedText = finalText;
+    editMode = false;
+    updateFooter();
+    msgHidePopup();
+    live.focus();
+    triggerSend(live);
+  }
+
   /** Tear down the active review (after the user sends, or on navigation). */
   function clearReview() {
-    reviewHidePopup();
+    msgHidePopup();
+    dismissMaskPrompt();
     review = null;
-    renderReviewSection();
+    editMode = false;
+    renderMessageTab();
+    updateFooter();
   }
 
   /* ------------------------------------------------------------------ *
@@ -1308,7 +1488,7 @@
     if (
       p &&
       p.closest(
-        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle, .guardai-review-pop"
+        ".guardai-warning, .guardai-toast, .guardai-panel, .guardai-reopen, .guardai-msgtoggle, .guardai-review-pop, .guardai-prompt"
       )
     ) {
       return true; // our own UI
@@ -1672,6 +1852,7 @@
     lastHref = location.href;
     state.lastMaskedText = null; // don't carry a bypass into a new conversation
     bypassNext = false;
+    dismissMaskPrompt();
     clearReview(); // a half-finished review doesn't belong in a new conversation
     announcedSwaps.clear(); // re-announce restores in the new view
     if (document.body) {

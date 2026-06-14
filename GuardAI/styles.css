@@ -183,81 +183,83 @@
   opacity: 1;
 }
 
-/* ---- Persistent activity panel (right side) ---- */
+/* =====================================================================
+ * Persistent activity panel (right side) — redesigned.
+ * Minimal dark, spacious, two pill tabs (Masked / Message), 13px+ text.
+ * ===================================================================== */
 .guardai-panel {
   position: fixed;
-  top: 16px;
-  right: 16px;
-  bottom: 16px;
+  top: 20px;
+  right: 20px;
+  bottom: 20px;
   z-index: 2147483647;
-  width: 320px;
-  max-width: calc(100vw - 32px);
+  width: 420px;
+  max-width: calc(100vw - 40px);
   display: flex;
   flex-direction: column;
-  background: #161b22;
-  color: #e6edf3;
-  border: 1px solid #2a313c;
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  background: #1a1a1a;
+  color: #f4f4f5;
+  border: 1px solid #2c2c2c;
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 12.5px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.5;
   overflow: hidden;
-  animation: guardai-pop 0.16s ease-out;
+  animation: guardai-pop 0.18s ease-out;
 }
 
 .guardai-panel__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 11px 14px;
-  background: #1c2230;
-  border-bottom: 1px solid #2a313c;
+  gap: 10px;
+  padding: 18px 22px 14px;
 }
-.guardai-panel__shield { font-size: 16px; }
-.guardai-panel__title { font-weight: 700; flex: 1; font-size: 13px; }
+.guardai-panel__shield { font-size: 20px; }
+.guardai-panel__title {
+  font-weight: 700;
+  flex: 1;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
 .guardai-panel__close {
   background: none;
   border: none;
-  color: #8b949e;
-  font-size: 20px;
+  color: #8a8a8f;
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
   padding: 0 4px;
+  border-radius: 8px;
+  transition: color 0.15s;
 }
-.guardai-panel__close:hover { color: #e6edf3; }
-
-.guardai-panel__sub {
-  padding: 9px 14px;
-  font-size: 11px;
-  color: #8b949e;
-  background: #12161d;
-  border-bottom: 1px solid #21262d;
-}
+.guardai-panel__close:hover { color: #f4f4f5; }
 
 /* ---- Auto-restore toggle ---- */
 .guardai-panel__toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #12161d;
-  border-bottom: 1px solid #21262d;
+  gap: 14px;
+  margin: 0 22px 16px;
+  padding: 14px 16px;
+  background: #242424;
+  border: 1px solid #2f2f2f;
+  border-radius: 14px;
 }
-.guardai-panel__toggletext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.guardai-panel__togglelabel { font-size: 12.5px; font-weight: 600; color: #e6edf3; }
-.guardai-panel__togglehint { font-size: 10.5px; color: #8b949e; }
+.guardai-panel__toggletext { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.guardai-panel__togglelabel { font-size: 14px; font-weight: 600; color: #f4f4f5; }
+.guardai-panel__togglehint { font-size: 12px; color: #8a8a8f; line-height: 1.45; }
 .guardai-panel__switch {
   flex: none;
   position: relative;
-  width: 38px;
-  height: 22px;
+  width: 46px;
+  height: 27px;
   border-radius: 999px;
-  border: 1px solid #2a313c;
-  background: #30363d;
+  border: 1px solid #3a3a3a;
+  background: #3a3a3a;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.18s, border-color 0.18s;
   padding: 0;
 }
 .guardai-panel__switch::after {
@@ -265,68 +267,97 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 16px;
-  height: 16px;
+  width: 21px;
+  height: 21px;
   border-radius: 50%;
-  background: #c9d1d9;
-  transition: transform 0.15s;
+  background: #d8d8d8;
+  transition: transform 0.18s;
 }
-.guardai-panel__switch--on { background: #238636; border-color: #2ea043; }
-.guardai-panel__switch--on::after { transform: translateX(16px); background: #fff; }
+.guardai-panel__switch--on { background: #4CAF82; border-color: #4CAF82; }
+.guardai-panel__switch--on::after { transform: translateX(19px); background: #fff; }
 
-.guardai-panel__actions {
+/* ---- Pill tab switcher ---- */
+.guardai-panel__tabs {
   display: flex;
-  gap: 8px;
-  padding: 8px 14px;
-  background: #12161d;
-  border-bottom: 1px solid #21262d;
+  gap: 4px;
+  margin: 0 22px 4px;
+  padding: 4px;
+  background: #242424;
+  border: 1px solid #2f2f2f;
+  border-radius: 12px;
 }
-.guardai-panel__action {
+.guardai-panel__tab {
   flex: 1;
-  background: #1c2230;
-  color: #c9d1d9;
-  border: 1px solid #2a313c;
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 11.5px;
+  background: transparent;
+  color: #9a9a9f;
+  border: none;
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.2s ease, color 0.2s ease;
 }
-.guardai-panel__action:hover { background: #232b3a; border-color: #3a4350; }
-.guardai-panel__action--danger { color: #f85149; border-color: rgba(248, 81, 73, 0.4); }
-.guardai-panel__action--danger:hover { background: rgba(248, 81, 73, 0.12); border-color: rgba(248, 81, 73, 0.7); }
+.guardai-panel__tab:hover { color: #d8d8d8; }
+.guardai-panel__tab--active {
+  background: #3a3a3a;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- Body / panes ---- */
+.guardai-panel__body {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+.guardai-panel__pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 22px 20px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  display: none;
+}
+.guardai-panel__pane--active {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
 
 .guardai-panel__list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
 }
 
 .guardai-panel__empty {
-  color: #8b949e;
-  font-size: 12px;
-  padding: 16px 8px;
+  color: #8a8a8f;
+  font-size: 13px;
+  padding: 28px 12px;
   text-align: center;
+  line-height: 1.6;
 }
 
+/* ---- Masked log cards ---- */
 .guardai-panel__row {
-  background: #1c2230;
-  border: 1px solid #21262d;
-  border-left: 3px solid #2a313c;
-  border-radius: 8px;
-  padding: 7px 9px;
+  background: #242424;
+  border: 1px solid #2f2f2f;
+  border-left: 3px solid #3a3a3a;
+  border-radius: 12px;
+  padding: 13px 15px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
-.guardai-panel__row--mask { border-left-color: #3fb950; }
-.guardai-panel__row--unmask { border-left-color: #58a6ff; }
-.guardai-panel__row--pending { border-left-color: #d29922; }
+.guardai-panel__row--mask { border-left-color: #4CAF82; }
+.guardai-panel__row--unmask { border-left-color: #6B9FFF; }
+.guardai-panel__row--pending { border-left-color: #FFD166; }
 
 .guardai-panel__rowhead {
   display: flex;
@@ -335,93 +366,238 @@
   gap: 8px;
 }
 .guardai-panel__tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #8b949e;
+  letter-spacing: 0.05em;
+  color: #8a8a8f;
 }
-.guardai-panel__row--mask .guardai-panel__tag { color: #3fb950; }
-.guardai-panel__row--unmask .guardai-panel__tag { color: #58a6ff; }
-.guardai-panel__row--pending .guardai-panel__tag { color: #d29922; }
+.guardai-panel__row--mask .guardai-panel__tag { color: #4CAF82; }
+.guardai-panel__row--unmask .guardai-panel__tag { color: #6B9FFF; }
+.guardai-panel__row--pending .guardai-panel__tag { color: #FFD166; }
 
 .guardai-panel__type {
-  font-size: 10px;
-  color: #6e7681;
+  font-size: 11px;
+  color: #6e6e73;
 }
 
 .guardai-panel__swap {
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 4px 7px;
+  gap: 5px 9px;
+  font-size: 13px;
 }
 .guardai-panel__from,
 .guardai-panel__to {
-  /* Show the full masked/restored value — never truncate. */
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.guardai-panel__arrow { color: #8b949e; flex: none; }
+.guardai-panel__arrow { color: #8a8a8f; flex: none; }
 
-/* mask: real (left, normal) -> fake (right, green) */
-.guardai-panel__row--mask .guardai-panel__from { color: #e6edf3; }
-.guardai-panel__row--mask .guardai-panel__to { color: #3fb950; font-weight: 600; }
-/* unmask: fake (left, struck red) -> real (right, green) */
+.guardai-panel__row--mask .guardai-panel__from { color: #f4f4f5; }
+.guardai-panel__row--mask .guardai-panel__to { color: #4CAF82; font-weight: 600; }
 .guardai-panel__row--unmask .guardai-panel__from {
-  color: #f85149;
+  color: #FF6B6B;
   text-decoration: line-through;
   opacity: 0.85;
 }
-.guardai-panel__row--unmask .guardai-panel__to { color: #3fb950; font-weight: 600; }
+.guardai-panel__row--unmask .guardai-panel__to { color: #4CAF82; font-weight: 600; }
 
-/* pending: fake shown as-is (response untouched), real hidden until Reveal */
-.guardai-panel__from--fake { color: #d29922; font-weight: 600; max-width: 100%; }
+.guardai-panel__from--fake { color: #FFD166; font-weight: 600; max-width: 100%; }
 .guardai-panel__reveal {
-  margin-top: 2px;
+  margin-top: 4px;
   align-self: flex-start;
-  background: #1c2230;
-  color: #d29922;
-  border: 1px solid rgba(210, 153, 34, 0.4);
-  border-radius: 6px;
-  padding: 5px 10px;
-  font-size: 11.5px;
+  background: transparent;
+  color: #FFD166;
+  border: 1px solid rgba(255, 209, 102, 0.4);
+  border-radius: 9px;
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
 }
-.guardai-panel__reveal:hover { filter: brightness(1.15); }
+.guardai-panel__reveal:hover {
+  background: rgba(255, 209, 102, 0.12);
+  border-color: rgba(255, 209, 102, 0.7);
+}
+
+/* ---- MESSAGE tab: legend + editable masked message ---- */
+.guardai-panel__msglegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+.guardai-panel__msglegend:empty { display: none; }
+.guardai-panel__legenditem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c8c8cc;
+}
+.guardai-panel__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.guardai-panel__editable {
+  min-height: 140px;
+  padding: 16px 18px;
+  background: #161616;
+  border: 1px solid #2f2f2f;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #f4f4f5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.guardai-panel__editable:focus { border-color: #4a4a4a; }
+.guardai-panel__mark {
+  background: color-mix(in srgb, var(--mk) 20%, transparent);
+  color: var(--mk);
+  border: 1px solid color-mix(in srgb, var(--mk) 55%, transparent);
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.guardai-panel__msgempty {
+  color: #8a8a8f;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 24px 6px;
+  text-align: center;
+}
+.guardai-panel__msgempty b { color: #c8c8cc; }
+
+/* ---- Footer: Send + Clear session ---- */
+.guardai-panel__footer {
+  display: flex;
+  gap: 10px;
+  padding: 16px 22px 20px;
+  border-top: 1px solid #262626;
+}
+.guardai-panel__send {
+  flex: 1;
+  background: #4CAF82;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: filter 0.15s;
+}
+.guardai-panel__send:hover { filter: brightness(1.08); }
+.guardai-panel__clear {
+  flex: 1;
+  background: transparent;
+  color: #FF6B6B;
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+.guardai-panel__clear:hover {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.7);
+}
+
+/* =====================================================================
+ * "Mask & Send / Mask & Edit" prompt — floats above the chat input.
+ * ===================================================================== */
+.guardai-prompt {
+  position: fixed;
+  z-index: 2147483647;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: #1a1a1a;
+  color: #f4f4f5;
+  border: 1px solid #2c2c2c;
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 16px;
+  animation: guardai-pop 0.16s ease-out;
+}
+.guardai-prompt__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+.guardai-prompt__shield { font-size: 18px; }
+.guardai-prompt__text { font-size: 14px; font-weight: 600; color: #f4f4f5; }
+.guardai-prompt__btns { display: flex; gap: 10px; }
+.guardai-prompt__btn {
+  flex: 1;
+  border-radius: 12px;
+  padding: 14px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid transparent;
+  transition: filter 0.15s, background 0.15s, border-color 0.15s;
+}
+.guardai-prompt__btn--send {
+  background: #4CAF82;
+  color: #fff;
+}
+.guardai-prompt__btn--send:hover { filter: brightness(1.08); }
+.guardai-prompt__btn--edit {
+  background: #242424;
+  color: #f4f4f5;
+  border-color: #3a3a3a;
+}
+.guardai-prompt__btn--edit:hover { background: #2e2e2e; border-color: #4a4a4a; }
 
 /* ---- Collapsed reopen badge ---- */
 .guardai-reopen {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: 20px;
+  bottom: 20px;
   z-index: 2147483647;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: #1c2230;
-  color: #e6edf3;
-  border: 1px solid #2a313c;
+  gap: 8px;
+  background: #242424;
+  color: #f4f4f5;
+  border: 1px solid #2f2f2f;
   border-radius: 999px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  padding: 9px 14px;
+  padding: 12px 18px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  transition: filter 0.15s;
 }
-.guardai-reopen:hover { filter: brightness(1.15); }
-.guardai-reopen__shield { font-size: 16px; }
+.guardai-reopen:hover { filter: brightness(1.12); }
+.guardai-reopen__shield { font-size: 18px; }
 .guardai-reopen__count {
-  background: #238636;
+  background: #4CAF82;
   color: #fff;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 1px 7px;
-  min-width: 16px;
+  padding: 2px 8px;
+  min-width: 18px;
   text-align: center;
 }
 
@@ -459,117 +635,44 @@
   border-color: rgba(63, 185, 80, 0.35);
 }
 
-/* ---- "Did we miss anything?" review section (in the side panel) -------- */
-.guardai-panel__review {
-  padding: 11px 14px 12px;
-  background: #12161d;
-  border-bottom: 1px solid #21262d;
-}
-.guardai-panel__reviewhead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-.guardai-panel__reviewtitle {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #e6edf3;
-}
-.guardai-panel__reviewcount {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #3fb950;
-  flex: none;
-}
-.guardai-panel__reviewhint {
-  margin-top: 2px;
-  font-size: 10.5px;
-  color: #8b949e;
-  line-height: 1.4;
-}
-.guardai-panel__reviewlegend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-  margin-top: 8px;
-}
-.guardai-review-legend__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  color: #c9d1d9;
-}
-.guardai-review-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.guardai-panel__reviewbody {
-  margin-top: 8px;
-  max-height: 180px;
-  overflow-y: auto;
-  padding: 10px;
-  background: #010409;
-  border: 1px solid #21262d;
-  border-radius: 8px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: #e6edf3;
-  white-space: pre-wrap;
-  word-break: break-word;
-  user-select: text;
-  cursor: text;
-}
-.guardai-review-mark {
-  background: color-mix(in srgb, var(--mk) 22%, transparent);
-  color: var(--mk);
-  border: 1px solid color-mix(in srgb, var(--mk) 55%, transparent);
-  border-radius: 5px;
-  padding: 0 3px;
-  font-weight: 600;
-}
-.guardai-review-seg { color: #e6edf3; }
-
-/* Selection mask popup (anchored to the highlighted text) */
+/* ---- Selection mask popup (anchored to highlighted text in MESSAGE tab) ---- */
 .guardai-review-pop {
   position: fixed;
   z-index: 2147483647;
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  gap: 6px;
+  padding: 6px;
+  background: #242424;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 .guardai-review-pop__btn {
-  background: #1c2230;
-  color: #c9d1d9;
-  border: 1px solid #2a313c;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
+  background: #2e2e2e;
+  color: #f4f4f5;
+  border: 1px solid #3a3a3a;
+  border-radius: 9px;
+  padding: 9px 13px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
 }
-.guardai-review-pop__btn:hover { background: #232b3a; border-color: #3a4350; }
-.guardai-review-pop__go { background: #238636; color: #fff; border-color: #2ea043; }
-.guardai-review-pop__go:hover { background: #2ea043; }
+.guardai-review-pop__btn:hover { background: #383838; border-color: #4a4a4a; }
+.guardai-review-pop__go { background: #4CAF82; color: #fff; border-color: #4CAF82; }
+.guardai-review-pop__go:hover { filter: brightness(1.08); }
 .guardai-review-pop__input {
-  background: #0d1117;
-  color: #e6edf3;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 12px;
+  background: #161616;
+  color: #f4f4f5;
+  border: 1px solid #3a3a3a;
+  border-radius: 9px;
+  padding: 9px 11px;
+  font-size: 13px;
   font-family: inherit;
-  width: 150px;
+  width: 170px;
   outline: none;
 }
-.guardai-review-pop__input:focus { border-color: #58a6ff; }
+.guardai-review-pop__input:focus { border-color: #6B9FFF; }
