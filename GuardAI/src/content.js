@@ -712,6 +712,7 @@
   let msgEmptyEl = null;
   let footerSendEl = null;
   let msgApplyEl = null; // "Apply changes" button in the MESSAGE tab
+  let msgHintEl = null; // "Highlight any text to manually mask it" instruction
   let msgRealViewEl = null; // MESSAGE tab "What you see" read-only view
   let msgViewTabsEl = null; // the "What AI sees / What you see" sub-tab bar
   let msgView = "ai"; // "ai" = masked (editable) | "you" = original (read-only)
@@ -811,6 +812,7 @@
       `<button class="guardai-panel__msgview" data-msgview="you">What you see</button>` +
       `</div>` +
       `<div class="guardai-panel__msglegend"></div>` +
+      `<p class="guardai-panel__msghint">Highlight any text to manually mask it</p>` +
       `<div class="guardai-panel__editable" contenteditable="true" spellcheck="false"></div>` +
       `<div class="guardai-panel__readview" style="display:none"></div>` +
       `<button class="guardai-panel__apply" style="display:none">Apply changes</button>` +
@@ -829,6 +831,7 @@
     msgEmptyEl = panelEl.querySelector(".guardai-panel__msgempty");
     footerSendEl = panelEl.querySelector(".guardai-panel__send");
     msgApplyEl = panelEl.querySelector(".guardai-panel__apply");
+    msgHintEl = panelEl.querySelector(".guardai-panel__msghint");
     msgRealViewEl = panelEl.querySelector(".guardai-panel__readview");
     msgViewTabsEl = panelEl.querySelector(".guardai-panel__msgviews");
 
@@ -1382,6 +1385,7 @@
     if (!review || !review.items.length) {
       msgEditableEl.innerHTML = "";
       msgEditableEl.style.display = "none";
+      if (msgHintEl) msgHintEl.style.display = "none";
       if (msgRealViewEl) {
         msgRealViewEl.innerHTML = "";
         msgRealViewEl.style.display = "none";
@@ -1394,6 +1398,7 @@
       return;
     }
     if (msgEmptyEl) msgEmptyEl.style.display = "none";
+    if (msgHintEl) msgHintEl.style.display = "";
 
     // "What AI sees": surrounding real text + marks showing the fake, with the
     // real value as a small grey caption underneath each mark.
@@ -1456,7 +1461,8 @@
     const showYou = msgView === "you";
     if (msgEditableEl) msgEditableEl.style.display = hasItems && !showYou ? "" : "none";
     if (msgRealViewEl) msgRealViewEl.style.display = hasItems && showYou ? "" : "none";
-    // Editing only applies to the "What AI sees" view.
+    // Hint and Apply only apply to the "What AI sees" editable view.
+    if (msgHintEl) msgHintEl.style.display = hasItems && !showYou ? "" : "none";
     if (msgApplyEl) msgApplyEl.style.display = hasItems && !showYou ? "" : "none";
     hideMarkTip();
   }
