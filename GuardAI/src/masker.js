@@ -163,8 +163,22 @@
       return `${lat}, ${lng}`;
     },
     MONEY(real, seed) {
-      const amount = 1000 + (seed % 99000);
-      return "$" + amount.toLocaleString("en-AU");
+      const lc = (real || "").toLowerCase();
+      // Parse the base number (strip $ and commas).
+      const rawNum = parseFloat((real || "").replace(/[^0-9.]/g, "")) || 10000;
+      // Scale up if the original used a verbal multiplier.
+      const hasBillion = lc.includes("billion");
+      const hasMillion = lc.includes("million");
+      let magnitude = rawNum;
+      if (hasBillion) magnitude *= 1e9;
+      else if (hasMillion) magnitude *= 1e6;
+      // Generate a fake ±20 % of the real value so it stays in the same range.
+      const pct = 0.8 + ((seed % 400) / 1000); // 0.80 – 1.20
+      const fakeVal = Math.max(1000, Math.round(magnitude * pct));
+      // Format to match the original style.
+      if (hasBillion) return "$" + (fakeVal / 1e9).toFixed(1).replace(/\.0$/, "") + " billion";
+      if (hasMillion) return "$" + (fakeVal / 1e6).toFixed(1).replace(/\.0$/, "") + " million";
+      return "$" + fakeVal.toLocaleString("en-AU");
     },
     ADDRESS(real, seed) {
       const num = (seed % 200) + 1;

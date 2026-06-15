@@ -301,6 +301,7 @@
   }
 
   function detectMoney(text, out) {
+    // Standard comma-formatted or bare 4+ digit dollar amounts (context required).
     const re = /\$\s?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\$\s?\d{4,}(?:\.\d{1,2})?/g;
     const ctx = [
       "salary", "revenue", "profit", "invoice", "payment", "income", "wage",
@@ -312,6 +313,12 @@
       if (val > 1000 && near(text, m.index, re.lastIndex, ctx, 40)) {
         out.push(finding("MONEY", "Financial amount", m[0].trim(), m.index, "medium"));
       }
+    }
+    // Verbal multipliers: $2.4 million / $1.2 billion — always significant, no
+    // context check needed.
+    const reVerbal = /\$\s?\d+(?:\.\d+)?\s*(?:million|billion|trillion)\b/gi;
+    while ((m = reVerbal.exec(text))) {
+      out.push(finding("MONEY", "Financial amount", m[0].trim(), m.index, "medium"));
     }
   }
 
@@ -489,6 +496,11 @@
     "medicare", "tfn", "abn", "acn", "bsb", "licence", "license", "passport",
     "visa", "ssn", "pension", "centrelink", "ndis", "ihi", "ahpra",
     "number", "card", "id", "identifier",
+    // Corporate suffixes — prevent "Acme Corp" / "Pacific Ltd" matching as a person name.
+    "corp", "corporation", "inc", "incorporated", "ltd", "limited", "pty",
+    "plc", "llc", "llp", "lp", "group", "holdings", "partners", "associates",
+    "solutions", "services", "industries", "technologies", "enterprises",
+    "consulting", "management", "financial", "capital", "ventures", "global",
   ]);
   // Explicit self-introduction phrases that make a capitalised word pair a clear
   // name even when no other identifier is present in the message.
