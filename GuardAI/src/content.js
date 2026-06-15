@@ -563,6 +563,9 @@
     }));
     logActivity("mask", replacements);
     if (ok) reportStats({ masked: replacements.length });
+    // Snapshot the review so the Message tab stays populated after the soft-nav
+    // that follows a successful send (handleSoftNav clears `review` but not this).
+    sentReview = review;
     editMode = false;
     panelClosed = false;
     ensurePanel();
@@ -922,6 +925,8 @@
     loggedKeys.clear();
     announcedSwaps.clear();
     state.lastMaskedText = null;
+    review = null;
+    sentReview = null;
     try {
       chrome.storage.local.set({ [ACTIVITY_KEY]: [] });
     } catch {
@@ -1172,6 +1177,10 @@
   // items: [{ start, end, value, type, manual, fake }]. Items added manually in
   // the MESSAGE tab use start/end of -1 (their position lives in the DOM).
   let review = null;
+  // Snapshot of the last successfully sent review, kept so the Message tab
+  // remains populated after sending (soft-nav clears `review` but not this).
+  // Cleared only by clearSession().
+  let sentReview = null;
   let msgPending = null; // { range: Range, value: string } awaiting auto/custom replace
   let msgPop = null; // the auto/custom replace popup element
 
@@ -1379,10 +1388,13 @@
    */
   function renderMessageTab() {
     if (!msgEditableEl) return;
-    const positioned = review
-      ? review.items.filter((it) => it.start >= 0).sort((a, b) => a.start - b.start)
+    // Use `review` if active; fall back to `sentReview` so the tab stays
+    // populated after a successful send (when soft-nav clears `review`).
+    const activeReview = review || sentReview;
+    const positioned = activeReview
+      ? activeReview.items.filter((it) => it.start >= 0).sort((a, b) => a.start - b.start)
       : [];
-    if (!review || !review.items.length) {
+    if (!activeReview || !activeReview.items.length) {
       msgEditableEl.innerHTML = "";
       msgEditableEl.style.display = "none";
       if (msgHintEl) msgHintEl.style.display = "none";
@@ -1398,20 +1410,21 @@
       return;
     }
     if (msgEmptyEl) msgEmptyEl.style.display = "none";
-    if (msgHintEl) msgHintEl.style.display = "";
+    // In the sent (read-only) state the editable hint is not relevant.
+    if (msgHintEl) msgHintEl.style.display = review ? "" : "none";
 
     // "What AI sees": surrounding real text + marks showing the fake, with the
     // real value as a small grey caption underneath each mark.
     const out = [];
     let cursor = 0;
     for (const it of positioned) {
-      if (it.start > cursor) out.push(escapeHtml(review.original.slice(cursor, it.start)));
+      if (it.start > cursor) out.push(escapeHtml(activeReview.original.slice(cursor, it.start)));
       out.push(markHtml(it, "ai"));
       cursor = it.end;
     }
-    if (cursor < review.original.length) out.push(escapeHtml(review.original.slice(cursor)));
+    if (cursor < activeReview.original.length) out.push(escapeHtml(activeReview.original.slice(cursor)));
     // Append any manual (start<0) items that aren't part of the original text run.
-    for (const it of review.items) {
+    for (const it of activeReview.items) {
       if (it.start < 0) out.push(" " + markHtml(it, "ai"));
     }
     msgEditableEl.innerHTML = out.join("");
@@ -1448,7 +1461,10 @@
 
   /** Apply the current msgView: toggle which view is visible + the sub-tabs. */
   function applyMsgView() {
-    const hasItems = !!(review && review.items.length);
+    const activeReview = review || sentReview;
+    const hasItems = !!(activeReview && activeReview.items.length);
+    // Editing controls only apply when a live (unsent) review is active.
+    const isEditable = !!(review && review.items.length);
     if (msgViewTabsEl) {
       msgViewTabsEl.style.display = hasItems ? "" : "none";
       msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
@@ -1459,11 +1475,15 @@
       });
     }
     const showYou = msgView === "you";
-    if (msgEditableEl) msgEditableEl.style.display = hasItems && !showYou ? "" : "none";
+    if (msgEditableEl) {
+      msgEditableEl.style.display = hasItems && !showYou ? "" : "none";
+      // Make read-only when showing the sent snapshot (no live review to edit).
+      msgEditableEl.contentEditable = isEditable ? "true" : "false";
+    }
     if (msgRealViewEl) msgRealViewEl.style.display = hasItems && showYou ? "" : "none";
-    // Hint and Apply only apply to the "What AI sees" editable view.
-    if (msgHintEl) msgHintEl.style.display = hasItems && !showYou ? "" : "none";
-    if (msgApplyEl) msgApplyEl.style.display = hasItems && !showYou ? "" : "none";
+    // Hint and Apply only apply to the live editable "What AI sees" view.
+    if (msgHintEl) msgHintEl.style.display = isEditable && !showYou ? "" : "none";
+    if (msgApplyEl) msgApplyEl.style.display = isEditable && !showYou ? "" : "none";
     hideMarkTip();
   }
 
@@ -1642,8 +1662,9 @@
   function renderMsgLegend() {
     if (!msgLegendEl) return;
     const seen = new Map();
-    if (review) {
-      for (const it of review.items) {
+    const activeReview = review || sentReview;
+    if (activeReview) {
+      for (const it of activeReview.items) {
         const st = markStyle(it.type, it.manual);
         if (!seen.has(st.label)) seen.set(st.label, st.color);
       }
@@ -1867,6 +1888,9 @@
     finalText = finalText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
     await typeText(live, finalText);
     state.lastMaskedText = finalText;
+    // Snapshot review so the Message tab stays populated after the soft-nav
+    // that follows a successful send (handleSoftNav clears `review` but not this).
+    if (review) sentReview = review;
     editMode = false;
     updateFooter();
     msgHidePopup();
