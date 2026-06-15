@@ -626,6 +626,31 @@
   }
 
   /**
+   * "Manual mask": open the MESSAGE tab showing the ORIGINAL unmasked message
+   * with no auto-masking applied. The user highlights any words they want to
+   * mask and chooses Auto-replace or Custom replace themselves, then clicks Send.
+   * Nothing is typed into the real chat input yet — that happens on panel Send.
+   */
+  async function doManualMask(editor, original) {
+    console.log("[GuardAI] doManualMask — setting up empty review for manual masking");
+    await masker.load();
+    // Build an empty review with no auto-detected items so the panel shows
+    // the original text with no marks, ready for the user to highlight.
+    review = { editor, original, items: [], fakeByReal: new Map() };
+    msgView = "ai";
+    editMode = true;
+    panelClosed = false;
+    ensurePanel();
+    if (reopenEl) reopenEl.style.display = "none";
+    renderMessageTab();
+    renderPanel();
+    setActiveTab("message");
+    updateFooter();
+    const live = liveEditor();
+    if (live) live.focus();
+  }
+
+  /**
    * Trigger the platform's send action robustly: poll for an enabled send
    * button (up to ~1.5s) and click it; only fall back to a synthetic Enter if
    * no usable button appears.
@@ -1245,6 +1270,7 @@
       `<button class="guardai-prompt__btn guardai-prompt__btn--edit">Mask &amp; Edit</button>` +
       `</div>` +
       `<div class="guardai-prompt__btns guardai-prompt__btns--secondary">` +
+      `<button class="guardai-prompt__btn guardai-prompt__btn--ghost guardai-prompt__btn--manual">Manual mask</button>` +
       `<button class="guardai-prompt__btn guardai-prompt__btn--ghost guardai-prompt__btn--anyway">Send anyway</button>` +
       `<button class="guardai-prompt__btn guardai-prompt__btn--ghost guardai-prompt__btn--cancel">Cancel</button>` +
       `</div>`;
@@ -1283,6 +1309,14 @@
       doMaskAndEdit(editor, text, findings).catch((err) => {
         console.error("[GuardAI] Mask & Edit failed:", err);
         showErrorToast("Mask & Edit failed — please reload the page and try again.");
+      });
+    };
+    wrap.querySelector(".guardai-prompt__btn--manual").onclick = () => {
+      console.log("[GuardAI] Manual mask clicked — opening panel with unmasked message");
+      dismissMaskPrompt();
+      doManualMask(editor, text).catch((err) => {
+        console.error("[GuardAI] Manual mask failed:", err);
+        showErrorToast("Manual mask failed — please reload the page and try again.");
       });
     };
 
@@ -1394,7 +1428,11 @@
     const positioned = activeReview
       ? activeReview.items.filter((it) => it.start >= 0).sort((a, b) => a.start - b.start)
       : [];
-    if (!activeReview || !activeReview.items.length) {
+    // Show empty state only when there is genuinely no content to display.
+    // A review with zero items but original text (Manual mask mode) still
+    // has content to show — the original message waiting for user highlights.
+    const hasContent = !!(activeReview && activeReview.original);
+    if (!hasContent) {
       msgEditableEl.innerHTML = "";
       msgEditableEl.style.display = "none";
       if (msgHintEl) msgHintEl.style.display = "none";
