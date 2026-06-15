@@ -324,6 +324,7 @@
    * shows the text, so the masked value can never silently fail to land.
    */
   async function typeText(el, text) {
+    console.log("[GuardAI] typeText — clearing editor, el in DOM:", document.contains(el));
     el.focus();
     clearEditor(el);
     await delay(20);
@@ -332,10 +333,12 @@
     // Re-resolve a fresh reference if the original is now detached so that
     // subsequent operations don't throw NotFoundError.
     if (!document.contains(el)) {
+      console.log("[GuardAI] typeText — editor detached after clear, re-finding...");
       const fresh = findEditor();
-      if (!fresh) return false;
+      if (!fresh) { console.error("[GuardAI] typeText — no fresh editor found"); return false; }
       el = fresh;
       el.focus();
+      console.log("[GuardAI] typeText — re-found editor:", el);
     }
 
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
@@ -374,9 +377,10 @@
 
     // Char-by-char didn't fully land (possibly because the node was detached
     // mid-loop). Re-find the editor before the whole-string fallback.
+    console.log("[GuardAI] typeText — char-by-char incomplete, falling back to replaceAll");
     if (!document.contains(el)) {
       const fresh = findEditor();
-      if (fresh) el = fresh;
+      if (fresh) { console.log("[GuardAI] typeText — re-found editor for replaceAll"); el = fresh; }
     }
     return replaceAll(el, text);
   }
@@ -527,9 +531,11 @@
    * surface the MESSAGE tab, then send immediately — no editing step.
    */
   async function doMaskAndSend(editor, original, findings) {
+    console.log("[GuardAI] doMaskAndSend — building review model");
     await buildReviewModel(editor, original, findings);
     await registerReviewItems();
     const masked = computeMasked();
+    console.log("[GuardAI] doMaskAndSend — masked text:", masked);
     let live = liveEditor();
     if (!live) {
       // One retry after a short settle — the page may still be updating.
@@ -537,15 +543,18 @@
       live = liveEditor();
     }
     if (!live) {
+      console.error("[GuardAI] doMaskAndSend — no editor found");
       showErrorToast("Could not find the chat input — please click in the chat box and try again.");
       return;
     }
+    console.log("[GuardAI] doMaskAndSend — typing into editor:", live);
     review.editor = live;
     const ok = await typeText(live, masked);
     // typeText may have re-found a fresh editor node; re-resolve so triggerSend
     // dispatches to the element that is actually in the DOM right now.
     live = liveEditor();
     review.editor = live;
+    console.log("[GuardAI] doMaskAndSend — typeText ok:", ok, "— triggering send");
     state.lastMaskedText = masked;
     const replacements = review.items.map((it) => ({
       type: it.type,
@@ -571,9 +580,11 @@
    * button appears; the user edits freely and sends when ready.
    */
   async function doMaskAndEdit(editor, original, findings) {
+    console.log("[GuardAI] doMaskAndEdit — building review model");
     await buildReviewModel(editor, original, findings);
     await registerReviewItems();
     const masked = computeMasked();
+    console.log("[GuardAI] doMaskAndEdit — masked text:", masked);
     let live = liveEditor();
     if (!live) {
       // One retry after a short settle — the page may still be updating.
@@ -581,14 +592,17 @@
       live = liveEditor();
     }
     if (!live) {
+      console.error("[GuardAI] doMaskAndEdit — no editor found");
       showErrorToast("Could not find the chat input — please click in the chat box and try again.");
       return;
     }
+    console.log("[GuardAI] doMaskAndEdit — typing into editor:", live);
     review.editor = live;
     const ok = await typeText(live, masked);
     // Re-resolve in case typeText found a fresh editor node during re-render.
     live = liveEditor();
     review.editor = live;
+    console.log("[GuardAI] doMaskAndEdit — typeText ok:", ok, "— opening panel");
     state.lastMaskedText = masked;
     const replacements = review.items.map((it) => ({
       type: it.type,
@@ -614,12 +628,14 @@
    * no usable button appears.
    */
   function triggerSend(editor) {
+    console.log("[GuardAI] triggerSend — polling for send button");
     let tries = 0;
     const MAX = 30; // ~1.5s at 50ms
     const attempt = () => {
       tries++;
       const btn = findEnabledSendButton();
       if (btn) {
+        console.log("[GuardAI] triggerSend — clicking send button:", btn);
         bypassNext = true; // let our own click pass through the interceptor
         btn.click();
         return;
@@ -630,8 +646,9 @@
       }
       // Fallback: synthetic Enter on the editor. Prefer a freshly-resolved
       // editor over the possibly-detached captured reference.
+      console.log("[GuardAI] triggerSend — no send button found after", MAX, "tries, firing synthetic Enter");
       const live = (document.contains(editor) ? editor : null) || findEditor();
-      if (!live) return;
+      if (!live) { console.error("[GuardAI] triggerSend — no editor for Enter fallback"); return; }
       bypassNext = true;
       live.focus();
       live.dispatchEvent(
@@ -1223,21 +1240,25 @@
     maskPromptEl = wrap;
 
     wrap.querySelector(".guardai-prompt__close").onclick = () => {
+      console.log("[GuardAI] ✕ Close clicked — dismissing popup");
       dismissMaskPrompt();
       const live = editor && document.contains(editor) ? editor : findEditor();
       if (live) live.focus();
     };
     wrap.querySelector(".guardai-prompt__btn--cancel").onclick = () => {
+      console.log("[GuardAI] Cancel clicked — dismissing popup, restoring focus");
       dismissMaskPrompt();
       const live = editor && document.contains(editor) ? editor : findEditor();
       if (live) live.focus();
     };
     wrap.querySelector(".guardai-prompt__btn--anyway").onclick = () => {
+      console.log("[GuardAI] Send Anyway clicked — sending original unmasked text");
       dismissMaskPrompt();
       reportStats({ sentUnmasked: 1 });
       resend();
     };
     wrap.querySelector(".guardai-prompt__btn--send").onclick = () => {
+      console.log("[GuardAI] Mask & Send clicked — starting mask flow");
       dismissMaskPrompt();
       doMaskAndSend(editor, text, findings).catch((err) => {
         console.error("[GuardAI] Mask & Send failed:", err);
@@ -1245,6 +1266,7 @@
       });
     };
     wrap.querySelector(".guardai-prompt__btn--edit").onclick = () => {
+      console.log("[GuardAI] Mask & Edit clicked — starting mask+review flow");
       dismissMaskPrompt();
       doMaskAndEdit(editor, text, findings).catch((err) => {
         console.error("[GuardAI] Mask & Edit failed:", err);
