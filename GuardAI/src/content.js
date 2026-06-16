@@ -877,6 +877,20 @@
 
     msgEditableEl.addEventListener("mouseup", msgHandleSelection);
     msgEditableEl.addEventListener("mouseover", msgMarkHover);
+    // Ctrl/Cmd+Enter in the editable box triggers Apply, just like clicking the button.
+    // The event is stopped in the capture phase so the global send interceptor
+    // never sees it (the panel editable matches the generic contenteditable selector).
+    msgEditableEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        applyMessageEdits();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        // Plain Enter: stop it reaching the global send interceptor — just insert
+        // a newline via execCommand so free typing still works naturally.
+        e.stopImmediatePropagation();
+      }
+    }, true);
     msgApplyEl.onclick = applyMessageEdits;
     if (msgViewTabsEl) {
       msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
@@ -1563,7 +1577,7 @@
 
   /** On hover over a mark in the editable, offer Remove mask / Change replacement. */
   function msgMarkHover(e) {
-    if (!review) return;
+    if (!review && !sentReview) return;
     const mark = e.target && e.target.closest && e.target.closest(".guardai-panel__mark");
     if (!mark || !msgEditableEl.contains(mark)) return;
     showMarkTip(mark);
