@@ -11,6 +11,17 @@
 
   const $ = (id) => document.getElementById(id);
 
+  /* ---- Dark / light mode ---- */
+  const THEME_KEY = "guardai_theme";
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle("gd-dark", dark);
+    const btn = $("theme-toggle");
+    if (btn) btn.textContent = dark ? "\u263D" : "\u2600"; // moon : sun
+  }
+  // Load preference instantly (before render) to avoid flash.
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  applyTheme(savedTheme === "dark");
+
   const els = {
     enabled: $("toggle-enabled"),
     masking: $("toggle-masking"),
@@ -141,6 +152,12 @@
   }
 
   /* ---- Wire up controls ---- */
+  $("theme-toggle").addEventListener("click", () => {
+    const dark = !document.documentElement.classList.contains("gd-dark");
+    applyTheme(dark);
+    localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+  });
+
   els.enabled.addEventListener("change", async () => {
     await chrome.storage.local.set({ guardai_enabled: els.enabled.checked });
     document.body.classList.toggle("gd-disabled", !els.enabled.checked);
