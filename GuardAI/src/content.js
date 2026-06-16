@@ -182,10 +182,19 @@
       "guardai_enabled",
       "guardai_masking_enabled",
       "guardai_auto_restore",
+      "guardai_theme",
     ]);
     state.enabled = data.guardai_enabled !== false; // default ON
     state.maskingEnabled = data.guardai_masking_enabled === true; // default OFF
     state.autoRestore = data.guardai_auto_restore !== false; // default ON
+    applyThemeToPage(data.guardai_theme === "light");
+  }
+
+  /** Add / remove html.guardai-light on the host page to switch all GuardAI
+   * elements between dark (default) and light mode without touching anything
+   * that belongs to the host site. */
+  function applyThemeToPage(light) {
+    document.documentElement.classList.toggle("guardai-light", light);
   }
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -199,6 +208,9 @@
     if (changes.guardai_auto_restore) {
       state.autoRestore = changes.guardai_auto_restore.newValue !== false;
       syncAutoRestoreSwitch();
+    }
+    if (changes.guardai_theme) {
+      applyThemeToPage(changes.guardai_theme.newValue === "light");
     }
   });
 

@@ -881,3 +881,168 @@
   line-height: 1.3;
   user-select: none;
 }
+
+/* =====================================================================
+ * LIGHT MODE — applied when popup saves guardai_theme = "light".
+ * The content script adds html.guardai-light to the host page <html>.
+ * Only GuardAI elements are targeted so the host page is never affected.
+ * ===================================================================== */
+
+/* ---- Side panel ---- */
+html.guardai-light .guardai-panel {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+}
+html.guardai-light .guardai-panel__close { color: #94a3b8; }
+html.guardai-light .guardai-panel__close:hover { color: #0f172a; }
+html.guardai-light .guardai-panel__toggle {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-panel__togglelabel { color: #0f172a; }
+html.guardai-light .guardai-panel__togglehint { color: #64748b; }
+html.guardai-light .guardai-panel__switch {
+  background: #cbd5e1;
+  border-color: #cbd5e1;
+}
+html.guardai-light .guardai-panel__switch::after { background: #fff; }
+html.guardai-light .guardai-panel__switch--on { background: #4CAF82; border-color: #4CAF82; }
+html.guardai-light .guardai-panel__tabs {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-panel__tab { color: #64748b; }
+html.guardai-light .guardai-panel__tab:hover { color: #0f172a; }
+html.guardai-light .guardai-panel__tab--active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+html.guardai-light .guardai-panel__empty { color: #94a3b8; }
+html.guardai-light .guardai-panel__row {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-panel__tag { color: #94a3b8; }
+html.guardai-light .guardai-panel__row--mask .guardai-panel__tag { color: #4CAF82; }
+html.guardai-light .guardai-panel__row--unmask .guardai-panel__tag { color: #3b82f6; }
+html.guardai-light .guardai-panel__row--pending .guardai-panel__tag { color: #d97706; }
+html.guardai-light .guardai-panel__type { color: #94a3b8; }
+html.guardai-light .guardai-panel__arrow { color: #94a3b8; }
+html.guardai-light .guardai-panel__row--mask .guardai-panel__from { color: #0f172a; }
+html.guardai-light .guardai-panel__row--unmask .guardai-panel__from {
+  color: #ef4444;
+  text-decoration: line-through;
+}
+html.guardai-light .guardai-panel__from--fake { color: #d97706; }
+html.guardai-light .guardai-panel__reveal {
+  color: #d97706;
+  border-color: rgba(217,119,6,0.4);
+}
+html.guardai-light .guardai-panel__reveal:hover { background: rgba(217,119,6,0.08); border-color: rgba(217,119,6,0.7); }
+html.guardai-light .guardai-panel__legenditem { color: #475569; }
+html.guardai-light .guardai-panel__msgviews {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-panel__msgview { color: #64748b; }
+html.guardai-light .guardai-panel__msgview:hover { color: #0f172a; }
+html.guardai-light .guardai-panel__msgview--active {
+  background: #ffffff;
+  color: #0f172a;
+}
+html.guardai-light .guardai-panel__editable,
+html.guardai-light .guardai-panel__readview {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+html.guardai-light .guardai-panel__editable:focus { border-color: #94a3b8; }
+html.guardai-light .guardai-panel__mark[data-sub]::after { color: #94a3b8; }
+html.guardai-light .guardai-panel__msgempty { color: #94a3b8; }
+html.guardai-light .guardai-panel__msgempty b { color: #475569; }
+html.guardai-light .guardai-panel__msghint { color: #94a3b8; }
+html.guardai-light .guardai-panel__footer { border-top-color: #e2e8f0; }
+html.guardai-light .guardai-panel__clear {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.35);
+}
+html.guardai-light .guardai-panel__clear:hover { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.6); }
+
+/* ---- Warning popup ---- */
+html.guardai-light .guardai-prompt {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.18);
+}
+html.guardai-light .guardai-prompt__grip::before { background: #cbd5e1; }
+html.guardai-light .guardai-prompt__grip:hover::before { background: #94a3b8; }
+html.guardai-light .guardai-prompt__text { color: #0f172a; }
+html.guardai-light .guardai-prompt__close { color: #94a3b8; }
+html.guardai-light .guardai-prompt__close:hover { color: #0f172a; }
+html.guardai-light .guardai-prompt__platform {
+  color: #92400e;
+  background: rgba(251,191,36,0.12);
+  border-color: rgba(251,191,36,0.35);
+}
+html.guardai-light .guardai-prompt__item {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-prompt__cat { color: #3b82f6; }
+html.guardai-light .guardai-prompt__count {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+html.guardai-light .guardai-prompt__why { color: #475569; }
+html.guardai-light .guardai-prompt__btn--edit {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-prompt__btn--edit:hover { background: #e2e8f0; border-color: #cbd5e1; }
+html.guardai-light .guardai-prompt__btn--ghost {
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-prompt__btn--ghost:hover { background: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
+html.guardai-light .guardai-prompt__btn--anyway { color: #ea580c; border-color: rgba(234,88,12,0.35); }
+html.guardai-light .guardai-prompt__btn--anyway:hover { background: rgba(234,88,12,0.07); border-color: rgba(234,88,12,0.6); color: #ea580c; }
+
+/* ---- Reopen badge ---- */
+html.guardai-light .guardai-reopen {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+}
+
+/* ---- Selection popup ---- */
+html.guardai-light .guardai-review-pop {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+}
+html.guardai-light .guardai-review-pop__btn {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-review-pop__btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+html.guardai-light .guardai-review-pop__input {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+html.guardai-light .guardai-review-pop__input:focus { border-color: #3b82f6; }
+
+/* ---- Error toast (light) ---- */
+html.guardai-light .guardai-toast--error {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}

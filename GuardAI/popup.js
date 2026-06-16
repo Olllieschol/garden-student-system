@@ -11,16 +11,16 @@
 
   const $ = (id) => document.getElementById(id);
 
-  /* ---- Dark / light mode ---- */
+  /* ---- Light / dark mode ---- */
   const THEME_KEY = "guardai_theme";
-  function applyTheme(dark) {
-    document.documentElement.classList.toggle("gd-dark", dark);
+  function applyTheme(light) {
+    document.body.classList.toggle("gd-light", light);
     const btn = $("theme-toggle");
-    if (btn) btn.textContent = dark ? "\u263D" : "\u2600"; // moon : sun
+    if (btn) btn.textContent = light ? "\u263D" : "\u2600"; // moon when light : sun when dark
   }
-  // Load preference instantly (before render) to avoid flash.
+  // Load preference instantly to avoid flash.
   const savedTheme = localStorage.getItem(THEME_KEY);
-  applyTheme(savedTheme === "dark");
+  applyTheme(savedTheme === "light");
 
   const els = {
     enabled: $("toggle-enabled"),
@@ -153,9 +153,13 @@
 
   /* ---- Wire up controls ---- */
   $("theme-toggle").addEventListener("click", () => {
-    const dark = !document.documentElement.classList.contains("gd-dark");
-    applyTheme(dark);
-    localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+    const light = !document.body.classList.contains("gd-light");
+    applyTheme(light);
+    localStorage.setItem(THEME_KEY, light ? "light" : "dark");
+    // Persist to chrome.storage.local so the content script can pick it up.
+    try {
+      chrome.storage.local.set({ [THEME_KEY]: light ? "light" : "dark" });
+    } catch (_) { /* non-fatal if popup context lost */ }
   });
 
   els.enabled.addEventListener("change", async () => {
