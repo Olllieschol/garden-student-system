@@ -1512,11 +1512,12 @@
   /** Apply the current msgView: toggle which view is visible + the sub-tabs. */
   function applyMsgView() {
     const activeReview = review || sentReview;
-    const hasItems = !!(activeReview && activeReview.items.length);
-    // Editing controls only apply when a live (unsent) review is active.
-    const isEditable = !!(review && review.items.length);
+    // hasContent: true when there's text to show (including zero-item Manual mask mode).
+    const hasContent = !!(activeReview && activeReview.original);
+    // isEditable: live review is active (user can still type / highlight-mask).
+    const isEditable = !!(review);
     if (msgViewTabsEl) {
-      msgViewTabsEl.style.display = hasItems ? "" : "none";
+      msgViewTabsEl.style.display = hasContent ? "" : "none";
       msgViewTabsEl.querySelectorAll(".guardai-panel__msgview").forEach((b) => {
         b.classList.toggle(
           "guardai-panel__msgview--active",
@@ -1526,11 +1527,11 @@
     }
     const showYou = msgView === "you";
     if (msgEditableEl) {
-      msgEditableEl.style.display = hasItems && !showYou ? "" : "none";
+      msgEditableEl.style.display = hasContent && !showYou ? "" : "none";
       // Make read-only when showing the sent snapshot (no live review to edit).
       msgEditableEl.contentEditable = isEditable ? "true" : "false";
     }
-    if (msgRealViewEl) msgRealViewEl.style.display = hasItems && showYou ? "" : "none";
+    if (msgRealViewEl) msgRealViewEl.style.display = hasContent && showYou ? "" : "none";
     // Hint and Apply only apply to the live editable "What AI sees" view.
     if (msgHintEl) msgHintEl.style.display = isEditable && !showYou ? "" : "none";
     if (msgApplyEl) msgApplyEl.style.display = isEditable && !showYou ? "" : "none";
