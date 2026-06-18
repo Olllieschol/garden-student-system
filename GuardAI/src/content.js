@@ -1122,6 +1122,9 @@
     async (e) => {
       if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
       if (!state.enabled) return; // master off — never intercept the send
+      // Never intercept keystrokes from inside GuardAI's own panel or overlays.
+      if (e.target && typeof e.target.closest === "function" &&
+          e.target.closest(".guardai-panel, .guardai-prompt, .guardai-msgpop, .guardai-marktip")) return;
       // Resolve the editor the user is actually typing in (not just the first
       // match on the page) so multi-editor / re-rendered layouts still intercept.
       const editor = findEditorFor(e.target) || findEditor();
@@ -1152,6 +1155,8 @@
       const btn = e.target.closest(CONFIG.sendButton.join(","));
       if (!btn) return;
       if (!state.enabled) return; // master off — never intercept the send
+      // Never intercept clicks inside GuardAI's own UI.
+      if (btn.closest(".guardai-panel, .guardai-prompt")) return;
 
       if (bypassNext) {
         bypassNext = false;
@@ -1892,13 +1897,17 @@
    * manual mask so the input always matches what the user sees in the panel.
    */
   async function syncLiveInput() {
-    if (!msgEditableEl) return;
+    if (!msgEditableEl) return false;
     const live = liveEditor();
-    if (!live) return;
+    if (!live) {
+      showErrorToast("Could not find the chat input — click in the chat box and try Apply again.");
+      return false;
+    }
     if (review) review.editor = live;
     let finalText = msgEditableEl.innerText.replace(/\u00a0/g, " ").replace(/\s+$/, "");
     await typeText(live, finalText);
     state.lastMaskedText = finalText;
+    return true;
   }
 
   /**
@@ -1907,7 +1916,8 @@
    */
   async function applyMessageEdits() {
     if (!msgApplyEl) return;
-    await syncLiveInput();
+    const ok = await syncLiveInput();
+    if (!ok) return; // error toast already shown by syncLiveInput
     const orig = "Apply changes";
     msgApplyEl.textContent = "Applied \u2713";
     msgApplyEl.classList.add("guardai-panel__apply--done");
