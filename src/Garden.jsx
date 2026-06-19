@@ -548,6 +548,9 @@ function GardenApp() {
   const visibleStudents = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived);
   const currentClass = classes.find(c => c.id === currentClassId);
 
+  // Close detail panel whenever class or page changes
+  useEffect(() => { setSelectedStudentId(null); }, [currentClassId, view]);
+
   // Class CRUD
   const addClass = (cls) => {
     const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
