@@ -650,8 +650,21 @@ function GardenApp() {
       parents: parentNames,
       phone: phoneLines.join('\n'),
       email: emailLines.join('\n'),
-      // Schedule starts empty for inquiries; what they requested is captured separately for reference
-      mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+      // Auto-fill schedule from parsed days/half-full fields
+      ...(() => {
+        const dayVal = (/half/i.test(p.halfOrFull)) ? 'H' : 'F';
+        const dr = (p.daysRequested || '').toLowerCase();
+        const has = (abbrs) => abbrs.some(a => dr.includes(a));
+        const all5 = /every day|all 5|mon.*fri|full week/i.test(dr);
+        return {
+          mon: (all5 || has(['mon'])) ? dayVal : '',
+          tue: (all5 || has(['tue'])) ? dayVal : '',
+          wed: (all5 || has(['wed'])) ? dayVal : '',
+          thu: (all5 || has(['thu'])) ? dayVal : '',
+          fri: (all5 || has(['fri'])) ? dayVal : '',
+          lunch: dayVal === 'F',
+        };
+      })(),
       // Inquiry-only fields (preserved verbatim from email)
       arrivalDate: p.arrivalDate || '',
       intendedStay: p.intendedStay || '',
