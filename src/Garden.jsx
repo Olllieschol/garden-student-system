@@ -1034,10 +1034,10 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
   const bottomRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(1900);
 
-  // Split incoming by whether the viewed week is on/after their transition date
+  // Split incoming: no date = immediate join; date reached for viewed week = promoted; future date = still pending
   const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
-  const incomingPromoted = incoming.filter(s => weekFri && s.transitionDate && s.transitionDate <= weekFri);
-  const incomingPending  = incoming.filter(s => !weekFri || !s.transitionDate || s.transitionDate > weekFri);
+  const incomingPromoted = incoming.filter(s => !s.transitionDate || (weekFri && s.transitionDate <= weekFri));
+  const incomingPending  = incoming.filter(s => s.transitionDate && (!weekFri || s.transitionDate > weekFri));
 
   // Sync the two scrollers
   useEffect(() => {
@@ -1140,10 +1140,13 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               </tr>
             </thead>
             <tbody>
-              {/* ACTIVE */}
-              <SectionDivider label="Active" count={active.length} colour="var(--accent)" />
+              {/* ACTIVE (includes incoming students who have no date or whose date has arrived) */}
+              <SectionDivider label="Active" count={active.length + incomingPromoted.length} colour="var(--accent)" />
               {active.map((s, idx) => (
                 <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
+              ))}
+              {incomingPromoted.map((s, idx) => (
+                <StudentRow key={s.id} student={s} idx={active.length + idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
               ))}
               {/* Totals */}
               <tr className="border-t border-b font-medium text-xs" style={{ borderColor: 'var(--line)', background: 'var(--accent-soft)' }}>
@@ -1166,16 +1169,6 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                   <SectionDivider label="Transitioning in" count={incomingPending.length} colour="#2563eb" />
                   {incomingPending.map((s, idx) => (
                     <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
-                  ))}
-                </>
-              )}
-
-              {/* JOINED THIS WEEK — incoming whose transition date has arrived for the viewed week */}
-              {incomingPromoted.length > 0 && (
-                <>
-                  <SectionDivider label="Joined this week" count={incomingPromoted.length} colour="var(--accent)" />
-                  {incomingPromoted.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
                   ))}
                 </>
               )}
