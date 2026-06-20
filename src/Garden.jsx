@@ -547,11 +547,129 @@ function parseEmail(text) {
 }
 
 // ============================================================
+// CSV BACKUP HELPERS
+// ============================================================
+
+const CSV_FLAT_COLS = [
+  'id','name','gender','centre','classId','status',
+  'dob','nationality','parents','phone','email',
+  'mon','tue','wed','thu','fri','lunch',
+  'note','originalStart','returningDate','lastDate','lengthOfStay',
+  'bondPaid','bondAmount','periodFrom','periodUntil',
+  'invoiceStatus','invoiceNote',
+  'transitionTo','transitionDate',
+  'archived','archivedAt',
+  'nativeLanguage','arrivalDate','intendedStay','daysRequested','halfOrFull',
+  'requestedClassRaw','formCompletedBy',
+  'vaccinationsYesNo','vaccinationsDetails',
+  'medicalDisabilitiesYesNo','medicalDisabilitiesDetails',
+  'medicalProblemsYesNo','medicalProblemsDetails',
+  'foodAllergiesYesNo','foodAllergiesDetails','epipen',
+  'hasMedicalFlag','hasLastDayFlag',
+];
+const CSV_JSON_COLS = ['dietaryFlags','suspensions','siblings','prepay','parent1','parent2','nanny','doctor'];
+const CSV_ALL_COLS = [...CSV_FLAT_COLS, ...CSV_JSON_COLS];
+
+function csvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function exportStudentsToCSV(students) {
+  const header = CSV_ALL_COLS.join(',');
+  const rows = students.map(s => {
+    return CSV_ALL_COLS.map(col => {
+      if (CSV_JSON_COLS.includes(col)) {
+        const v = s[col];
+        if (v === null || v === undefined) return '';
+        return csvCell(JSON.stringify(v));
+      }
+      return csvCell(s[col] ?? '');
+    }).join(',');
+  });
+  const csv = [header, ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `garden-backup-${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  return today;
+}
+
+function isGardenBackupCSV(text) {
+  return text.trimStart().startsWith('id,name,gender,centre,classId');
+}
+
+function parseGardenBackupCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  if (lines.length < 2) return [];
+  const headers = parseCSVRow(lines[0]);
+  const students = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cells = parseCSVRow(line);
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = cells[idx] ?? ''; });
+    // Parse JSON columns
+    CSV_JSON_COLS.forEach(col => {
+      if (obj[col]) {
+        try { obj[col] = JSON.parse(obj[col]); } catch { obj[col] = col.endsWith('s') ? [] : null; }
+      } else {
+        obj[col] = col === 'dietaryFlags' || col === 'suspensions' || col === 'siblings' ? [] : null;
+      }
+    });
+    // Coerce types
+    if (obj.id !== undefined) obj.id = Number(obj.id) || obj.id;
+    if (obj.bondAmount !== undefined) obj.bondAmount = Number(obj.bondAmount) || 0;
+    obj.lunch = obj.lunch === 'true' || obj.lunch === true;
+    obj.archived = obj.archived === 'true' || obj.archived === true;
+    obj.hasMedicalFlag = obj.hasMedicalFlag === 'true' || obj.hasMedicalFlag === true;
+    obj.hasLastDayFlag = obj.hasLastDayFlag === 'true' || obj.hasLastDayFlag === true;
+    if (obj.name) students.push(obj);
+  }
+  return students;
+}
+
+function parseCSVRow(line) {
+  const cells = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuote) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQuote = false; }
+      else { cur += ch; }
+    } else {
+      if (ch === '"') { inQuote = true; }
+      else if (ch === ',') { cells.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+  }
+  cells.push(cur);
+  return cells;
+}
+
+// ============================================================
 // APP
 // ============================================================
 
 function GardenApp() {
-  const [students, setStudents] = useState(SEED_STUDENTS);
+  const [students, setStudents] = useState(() => {
+    try {
+      const saved = localStorage.getItem('garden_students');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SEED_STUDENTS;
+  });
   const [classes, setClasses] = useState(INITIAL_CLASSES);
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
@@ -565,8 +683,25 @@ function GardenApp() {
   const [classesOpen, setClassesOpen] = useState(true);
   const [toast, setToast] = useState(null);
   const [showLeft, setShowLeft] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Persist students to localStorage on every change
+  useEffect(() => {
+    try { localStorage.setItem('garden_students', JSON.stringify(students)); } catch {}
+  }, [students]);
+
+  // Weekly backup reminder: show toast if last export was 7+ days ago
+  useEffect(() => {
+    const lastExport = localStorage.getItem('garden_last_export');
+    if (!lastExport) return;
+    const daysSince = Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000);
+    if (daysSince >= 7) {
+      showToast(`Reminder: last CSV backup was ${daysSince} days ago. Export a fresh one from the class view.`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-complete transitions whose date has arrived
   useEffect(() => {
@@ -625,8 +760,14 @@ function GardenApp() {
     showToast(`Added ${data.name}`);
   };
 
-  const showToast = m => { setToast(m); setTimeout(() => setToast(null), 2600); };
+  const showToast = m => { setToast(m); setTimeout(() => setToast(null), 3000); };
   const updateStudent = (id, patch) => setStudents(p => p.map(s => s.id === id ? { ...s, ...patch } : s));
+
+  const handleExportAll = () => {
+    const exportDate = exportStudentsToCSV(students);
+    localStorage.setItem('garden_last_export', exportDate);
+    showToast(`Exported ${students.length} students to garden-backup-${exportDate}.csv`);
+  };
   const archiveStudent = (id) => {
     const s = students.find(x => x.id === id);
     setStudents(p => p.map(x => x.id === id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
@@ -857,7 +998,13 @@ function GardenApp() {
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-faint)' }} />
-                  <input placeholder="Search students…" className="pl-9 pr-3 py-1.5 text-sm rounded-md border w-56 focus:outline-none focus:ring-2" style={{ borderColor: 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }} />
+                  <input
+                    placeholder="Search students…"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-3 py-1.5 text-sm rounded-md border w-56 focus:outline-none focus:ring-2"
+                    style={{ borderColor: 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }}
+                  />
                 </div>
                 <button onClick={() => setView('inquiries')} className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-white transition hover:opacity-90" style={{ background: 'var(--accent)' }}>
                   <Plus size={14} /> New from email
@@ -877,6 +1024,8 @@ function GardenApp() {
                 onImport={() => setImportModalOpen(true)}
                 onGoToInquiries={() => setView('inquiries')}
                 onUpdateClass={updateClass}
+                searchTerm={searchTerm}
+                onExportAll={handleExportAll}
               />
             )}
             {view === 'dashboard' && <DashboardView students={students.filter(s => s.centre === centre && !s.archived)} onJump={(cid) => { setCurrentClassId(cid); setView('class'); }} />}
@@ -899,40 +1048,47 @@ function GardenApp() {
         </div>
 
         {emailModalOpen && <EmailParseModal onClose={() => setEmailModalOpen(false)} onConfirm={handleParsedConfirm} />}
-        {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} onConfirm={(parsed) => {
-          const newStudents = parsed.map((s, i) => ({
-            id: i + 1,
-            name: s.name || 'Unnamed',
-            gender: s.gender || 'X',
-            centre,
-            classId: s.classId || currentClassId,
-            status: s.status || 'enrolled',
-            dob: s.dob || '',
-            nationality: s.nationality || '',
-            parents: s.parents || '',
-            phone: s.phone || '',
-            email: s.email || '',
-            mon: s.mon || '', tue: s.tue || '', wed: s.wed || '', thu: s.thu || '', fri: s.fri || '',
-            lunch: s.lunch || false,
-            note: s.note || '',
-            dietaryFlags: [],
-            suspensions: [],
-            originalStart: s.originalStart || '',
-            returningDate: '',
-            lastDate: s.lastDate || '',
-            lengthOfStay: s.lengthOfStay || '',
-            bondPaid: s.bondPaid || '',
-            bondAmount: 0,
-            periodFrom: s.periodFrom || '',
-            periodUntil: s.periodUntil || '',
-            invoiceStatus: 'not_sent',
-            invoiceNote: s.invoiceNote || '',
-            prepay: null,
-            siblings: [],
-          }));
+        {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} onConfirm={(parsed, isBackup) => {
+          let newStudents;
+          if (isBackup) {
+            // Full restore from Garden CSV backup — preserve every field exactly
+            newStudents = parsed;
+          } else {
+            // Legacy Excel import — map to standard shape
+            newStudents = parsed.map((s, i) => ({
+              id: i + 1,
+              name: s.name || 'Unnamed',
+              gender: s.gender || 'X',
+              centre,
+              classId: s.classId || currentClassId,
+              status: s.status || 'enrolled',
+              dob: s.dob || '',
+              nationality: s.nationality || '',
+              parents: s.parents || '',
+              phone: s.phone || '',
+              email: s.email || '',
+              mon: s.mon || '', tue: s.tue || '', wed: s.wed || '', thu: s.thu || '', fri: s.fri || '',
+              lunch: s.lunch || false,
+              note: s.note || '',
+              dietaryFlags: [],
+              suspensions: [],
+              originalStart: s.originalStart || '',
+              returningDate: '',
+              lastDate: s.lastDate || '',
+              lengthOfStay: s.lengthOfStay || '',
+              bondPaid: s.bondPaid || '',
+              bondAmount: 0,
+              periodFrom: s.periodFrom || '',
+              periodUntil: s.periodUntil || '',
+              invoiceStatus: 'not_sent',
+              invoiceNote: s.invoiceNote || '',
+              prepay: null,
+              siblings: [],
+            }));
+          }
           setStudents(newStudents);
           setImportModalOpen(false);
-          showToast(`Imported ${newStudents.length} students`);
+          showToast(`${isBackup ? 'Restored' : 'Imported'} ${newStudents.length} students`);
         }} />}
         {addClassOpen && <AddOrEditClassModal onClose={() => setAddClassOpen(false)} onSave={c => { addClass(c); setAddClassOpen(false); }} />}
         {editingClass && <AddOrEditClassModal existing={editingClass} onClose={() => setEditingClass(null)} onSave={c => { updateClass(editingClass.id, c); setEditingClass(null); }} onDelete={() => { deleteClass(editingClass.id); setEditingClass(null); }} />}
@@ -951,10 +1107,37 @@ function GardenApp() {
 // CLASS VIEW (the meaty one)
 // ============================================================
 
-function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass }) {
-  const active = students.filter(s => ['enrolled','suspended'].includes(s.status));
-  const waitlist = students.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
-  const left = students.filter(s => ['left','cancelled'].includes(s.status));
+function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, searchTerm = '', onExportAll }) {
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [activeStatusFilters, setActiveStatusFilters] = useState([]);
+
+  const toggleStatusFilter = (key) => {
+    setActiveStatusFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+
+  const matchesSearch = (s) => {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    return (
+      s.name?.toLowerCase().includes(q) ||
+      s.parents?.toLowerCase().includes(q) ||
+      s.nationality?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.note?.toLowerCase().includes(q)
+    );
+  };
+
+  const filterByStatus = (arr) => {
+    if (activeStatusFilters.length === 0) return arr;
+    return arr.filter(s => activeStatusFilters.includes(s.status));
+  };
+
+  const filteredStudents = filterByStatus(students.filter(matchesSearch));
+  const filteredIncoming = incomingStudents.filter(matchesSearch);
+
+  const active = filteredStudents.filter(s => ['enrolled','suspended'].includes(s.status));
+  const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
+  const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
   const enrolledCount = students.filter(s => s.status === 'enrolled').length;
   const suspendedCount = students.filter(s => s.status === 'suspended').length;
@@ -990,10 +1173,36 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
           <button onClick={onGoToInquiries} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md text-white font-medium transition hover:opacity-90" style={{ background: 'var(--accent)' }}>
             <Plus size={12} /> Enrol new student
           </button>
-          <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
-            <Filter size={12} /> Filter
-          </button>
-          <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
+          <div className="relative">
+            <button
+              onClick={() => setFilterOpen(o => !o)}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition ${activeStatusFilters.length > 0 ? 'bg-stone-900 text-white border-stone-900' : 'hover:bg-white'}`}
+              style={activeStatusFilters.length === 0 ? { borderColor: 'var(--line)' } : {}}>
+              <Filter size={12} /> Filter {activeStatusFilters.length > 0 && `(${activeStatusFilters.length})`}
+            </button>
+            {filterOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 rounded-lg border shadow-xl py-2 min-w-max" style={{ background: 'var(--paper)', borderColor: 'var(--line)' }}>
+                  <div className="px-3 py-1 text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>Filter by status</div>
+                  {Object.entries(STATUSES).map(([k, v]) => (
+                    <button key={k} onClick={() => toggleStatusFilter(k)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 transition">
+                      <span className={`w-1.5 h-1.5 rounded-full ${v.dot} shrink-0`} />
+                      {v.label}
+                      {activeStatusFilters.includes(k) && <Check size={10} className="ml-auto text-emerald-600" />}
+                    </button>
+                  ))}
+                  {activeStatusFilters.length > 0 && (
+                    <button onClick={() => setActiveStatusFilters([])} className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 transition border-t mt-1" style={{ borderColor: 'var(--line)' }}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={onExportAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
             <Download size={12} /> Export CSV
           </button>
           <button onClick={onImport} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
@@ -1020,7 +1229,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       </div>
 
       {/* The spreadsheet — horizontally scrollable with synced top scrollbar */}
-      <SpreadsheetWithTopScroll active={active} incoming={incomingStudents} waitlist={waitlist} left={left} totals={totals} students={students} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
+      <SpreadsheetWithTopScroll active={active} incoming={filteredIncoming} waitlist={waitlist} left={left} totals={totals} students={filteredStudents} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
 
       <div className="mt-4 text-xs flex items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
         <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → empty. Status cycles workflow. Scroll table sideways for more columns.
@@ -2255,6 +2464,7 @@ function ImportModal({ onClose, onConfirm }) {
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState(null);
   const [parseResult, setParseResult] = useState(null);
+  const [isBackup, setIsBackup] = useState(false);
   const fileInputRef = useRef(null);
   const ACCEPTED_TYPES = '.xlsx,.xls,.csv,.tsv';
 
@@ -2264,12 +2474,38 @@ function ImportModal({ onClose, onConfirm }) {
     setParsing(true);
     setParseError(null);
     try {
+      // Detect Garden backup CSV vs Garden Excel spreadsheet
+      if (f.name.endsWith('.csv') || f.name.endsWith('.tsv')) {
+        const text = await f.text();
+        if (isGardenBackupCSV(text)) {
+          const students = parseGardenBackupCSV(text);
+          if (students.length === 0) {
+            setParseError('No students found in the backup file.');
+            setParsing(false);
+            return;
+          }
+          setIsBackup(true);
+          // Build a result shape compatible with the preview section
+          const sheetMap = {};
+          students.forEach(s => { sheetMap[s.classId] = (sheetMap[s.classId] || 0) + 1; });
+          setParseResult({
+            students,
+            warnings: [],
+            sheets: Object.entries(sheetMap).map(([classId, count]) => ({ name: classId, count, classId })),
+          });
+          setStep('preview');
+          setParsing(false);
+          return;
+        }
+      }
+      // Excel / other format
       const result = await parseSpreadsheetFile(f);
       if (result.students.length === 0) {
         setParseError('No student rows found. Make sure this is a Garden enrolment spreadsheet with class sheets like "EL 1", "PK Saf", etc.');
         setParsing(false);
         return;
       }
+      setIsBackup(false);
       setParseResult(result);
       setStep('preview');
     } catch (err) { setParseError(`Failed to parse file: ${err.message}`); }
@@ -2342,8 +2578,12 @@ function ImportModal({ onClose, onConfirm }) {
           <>
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <div className="rounded-md border p-4 mb-4" style={{ borderColor: 'var(--line)', background: 'var(--accent-soft)' }}>
-                <div className="text-sm font-medium" style={{ color: 'var(--accent)' }}>Parsed {stats.total} students from {parseResult.sheets.length} sheets</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>Review the summary below and click Import to commit.</div>
+                <div className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
+                  {isBackup ? `Garden backup — ${stats.total} students across ${parseResult.sheets.length} classes` : `Parsed ${stats.total} students from ${parseResult.sheets.length} sheets`}
+                </div>
+                <div className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
+                  {isBackup ? 'This is a full Garden backup. Importing will replace ALL current data with this snapshot.' : 'Review the summary below and click Import to commit.'}
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <Stat label="Students" value={stats.total} />
@@ -2372,7 +2612,9 @@ function ImportModal({ onClose, onConfirm }) {
               <button onClick={reset} className="text-sm hover:underline" style={{ color: 'var(--ink-soft)' }}>← Back</button>
               <div className="flex gap-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-stone-100">Cancel</button>
-                <button onClick={() => onConfirm(parseResult.students)} className="px-4 py-2 text-sm rounded-md text-white font-medium" style={{ background: 'var(--accent)' }}>Import {parseResult.students.length} students</button>
+                <button onClick={() => onConfirm(parseResult.students, isBackup)} className="px-4 py-2 text-sm rounded-md text-white font-medium" style={{ background: 'var(--accent)' }}>
+                  {isBackup ? `Restore ${parseResult.students.length} students` : `Import ${parseResult.students.length} students`}
+                </button>
               </div>
             </div>
           </>
