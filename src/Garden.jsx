@@ -1396,11 +1396,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   const inv = INVOICE_STATUSES[student.invoiceStatus] || INVOICE_STATUSES.not_sent;
   const susCount = student.suspensions?.length || 0;
 
-  const cycleStatus = () => {
-    const order = ['inquiry','quote_sent','invoice_sent','wait_list','enrolled','suspended','left'];
-    const i = order.indexOf(student.status);
-    onUpdate(student.id, { status: order[(i+1) % order.length] });
-  };
+  const [statusOpen, setStatusOpen] = useState(false);
   const cycleInvoice = () => {
     const order = ['not_sent','sent','paid','prepay'];
     const i = order.indexOf(student.invoiceStatus || 'not_sent');
@@ -1429,10 +1425,34 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         </button>
       </td>
       <td className="px-3 py-2">
-        <button onClick={cycleStatus} className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-full border ${status.chip} whitespace-nowrap`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-          {status.label}
-        </button>
+        <div className="relative inline-block">
+          <button
+            onClick={() => setStatusOpen(o => !o)}
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-full border ${status.chip} whitespace-nowrap`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+            {status.label}
+          </button>
+          {statusOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
+              <div
+                className="absolute left-0 top-full mt-1 z-50 rounded-md border shadow-lg py-1 min-w-max"
+                style={{ background: 'var(--paper)', borderColor: 'var(--line)' }}>
+              {Object.entries(STATUSES).map(([k, v]) => (
+                <button
+                  key={k}
+                  onClick={() => { onUpdate(student.id, { status: k }); setStatusOpen(false); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 transition ${student.status === k ? 'font-semibold' : ''}`}
+                  style={{ color: 'var(--ink)' }}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${v.dot} shrink-0`} />
+                  {v.label}
+                  {student.status === k && <Check size={10} className="ml-auto" />}
+                </button>
+              ))}
+            </div>
+            </>
+          )}
+        </div>
       </td>
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.dob} onSave={v => onUpdate(student.id, { dob: v })} type="date" display={student.dob ? shortDate(student.dob) : ''} mono />
