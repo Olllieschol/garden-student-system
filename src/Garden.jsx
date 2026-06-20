@@ -1038,7 +1038,7 @@ function GardenApp() {
                 onExportAll={handleExportAll}
               />
             )}
-            {view === 'dashboard' && <DashboardView students={students.filter(s => s.centre === centre && !s.archived)} onJump={(cid) => { setCurrentClassId(cid); setView('class'); }} />}
+            {view === 'dashboard' && <DashboardView students={students.filter(s => s.centre === centre && !s.archived)} onJump={(cid) => { setCurrentClassId(cid); setView('class'); }} onExportAll={handleExportAll} />}
             {view === 'inquiries' && <InquiriesView students={students.filter(s => s.centre === centre && !s.archived)} onSelectStudent={setSelectedStudentId} onParsedConfirm={handleParsedConfirm} onUpdate={updateStudent} />}
             {view === 'all_students' && <AllStudentsView students={students.filter(s => s.centre === centre && !s.archived)} onSelectStudent={setSelectedStudentId} />}
             {view === 'archive' && <ArchiveView students={students.filter(s => s.centre === centre && s.archived)} onSelectStudent={setSelectedStudentId} onRestore={restoreStudent} onPermanentDelete={permanentDelete} />}
@@ -2660,7 +2660,7 @@ function Stat({ label, value }) {
 // DASHBOARD
 // ============================================================
 
-function DashboardView({ students, onJump }) {
+function DashboardView({ students, onJump, onExportAll }) {
   const { classes } = useClasses();
   const totalEnrolled = students.filter(s => s.status === 'enrolled').length;
   const totalInquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent'].includes(s.status)).length;
@@ -2671,7 +2671,12 @@ function DashboardView({ students, onJump }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 pt-7 pb-16">
-      <div className="font-display text-4xl mb-7">Today, {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+      <div className="flex items-center justify-between mb-7">
+        <div className="font-display text-4xl">Today, {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <button onClick={onExportAll} className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border hover:bg-white transition" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
+          <Download size={14} /> Export full school CSV
+        </button>
+      </div>
 
       <div className="grid grid-cols-4 gap-4 mb-8">
         <DashStat label="Enrolled" value={totalEnrolled} accent="var(--accent)" />
