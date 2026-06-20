@@ -952,8 +952,7 @@ function GardenApp() {
 // ============================================================
 
 function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass }) {
-  const active = students.filter(s => ['enrolled','suspended'].includes(s.status) && !s.transitionTo);
-  const leavingSoon = students.filter(s => ['enrolled','suspended'].includes(s.status) && s.transitionTo);
+  const active = students.filter(s => ['enrolled','suspended'].includes(s.status));
   const waitlist = students.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = students.filter(s => ['left','cancelled'].includes(s.status));
 
@@ -1155,16 +1154,6 @@ function SpreadsheetWithTopScroll({ active, leavingSoon = [], incoming = [], wai
                 <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch).length}</td>
                 <td colSpan={8}></td>
               </tr>
-
-              {/* LEAVING SOON */}
-              {leavingSoon.length > 0 && (
-                <>
-                  <SectionDivider label="Leaving soon" count={leavingSoon.length} colour="#b45309" />
-                  {leavingSoon.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
-                  ))}
-                </>
-              )}
 
               {/* INCOMING */}
               {incoming.length > 0 && (
@@ -1492,7 +1481,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
       </td>
       <td className="px-2 py-2 text-xs">
-        <TransitionCell student={student} />
+        <TransitionCell student={student} onUpdate={onUpdate} />
       </td>
       <td className="px-2 py-2 text-center">
         <span className={`inline-flex items-center justify-center w-7 h-6 rounded text-xs font-mono font-medium ${susCount >= 4 ? 'bg-red-100 text-red-700' : susCount === 3 ? 'bg-amber-100 text-amber-800' : 'text-stone-500'}`}>
@@ -1503,16 +1492,57 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   );
 }
 
-function TransitionCell({ student }) {
+function TransitionCell({ student, onUpdate }) {
   const { classes } = useClasses();
-  if (!student.transitionTo) return <span style={{ color: 'var(--ink-faint)' }}>—</span>;
+  const [open, setOpen] = useState(false);
+  const [destId, setDestId] = useState('');
+  const [date, setDate] = useState('');
+
+  const openPop = () => {
+    setDestId(student.transitionTo || '');
+    setDate(student.transitionDate || '');
+    setOpen(true);
+  };
+  const save = () => {
+    if (!destId) { clear(); return; }
+    onUpdate(student.id, { transitionTo: destId, transitionDate: date || null });
+    setOpen(false);
+  };
+  const clear = () => {
+    onUpdate(student.id, { transitionTo: null, transitionDate: null });
+    setOpen(false);
+  };
+
   const dest = classes.find(c => c.id === student.transitionTo);
+  const otherClasses = classes.filter(c => c.id !== student.classId);
+
+  if (open) {
+    return (
+      <div className="flex flex-col gap-1.5 py-1" onClick={e => e.stopPropagation()}>
+        <select value={destId} onChange={e => setDestId(e.target.value)} autoFocus className="w-full text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--accent)' }}>
+          <option value="">— no move —</option>
+          {otherClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--line)' }} />
+        <div className="flex gap-1">
+          <button onClick={save} className="flex-1 py-0.5 rounded text-xs text-white" style={{ background: 'var(--accent)' }}>Save</button>
+          <button onClick={() => setOpen(false)} className="px-2 py-0.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>✕</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!student.transitionTo) {
+    return (
+      <button onClick={openPop} className="text-xs hover:underline italic" style={{ color: 'var(--ink-faint)' }}>— set move</button>
+    );
+  }
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: '#b45309' }}>
+    <button onClick={openPop} className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: '#b45309' }}>
       <ArrowRight size={10} />
       {dest?.name || student.transitionTo}
       {student.transitionDate && <span className="font-mono opacity-70 ml-1">{shortDate(student.transitionDate)}</span>}
-    </span>
+    </button>
   );
 }
 
