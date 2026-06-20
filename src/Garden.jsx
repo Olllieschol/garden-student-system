@@ -1034,6 +1034,11 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
   const bottomRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(1900);
 
+  // Split incoming by whether the viewed week is on/after their transition date
+  const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
+  const incomingPromoted = incoming.filter(s => weekFri && s.transitionDate && s.transitionDate <= weekFri);
+  const incomingPending  = incoming.filter(s => !weekFri || !s.transitionDate || s.transitionDate > weekFri);
+
   // Sync the two scrollers
   useEffect(() => {
     const top = topRef.current;
@@ -1155,32 +1160,25 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <td colSpan={8}></td>
               </tr>
 
-              {/* INCOMING — split by whether their transition date has arrived for the viewed week */}
-              {(() => {
-                const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
-                const promoted = incoming.filter(s => weekFri && s.transitionDate && s.transitionDate <= weekFri);
-                const pending   = incoming.filter(s => !weekFri || !s.transitionDate || s.transitionDate > weekFri);
-                return (
-                  <>
-                    {promoted.length > 0 && (
-                      <>
-                        <SectionDivider label="Joined this week" count={promoted.length} colour="var(--accent)" />
-                        {promoted.map((s, idx) => (
-                          <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
-                        ))}
-                      </>
-                    )}
-                    {pending.length > 0 && (
-                      <>
-                        <SectionDivider label="Transitioning in" count={pending.length} colour="#2563eb" />
-                        {pending.map((s, idx) => (
-                          <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
-                        ))}
-                      </>
-                    )}
-                  </>
-                );
-              })()}
+              {/* TRANSITIONING IN — students whose join date hasn't arrived yet for this week */}
+              {incomingPending.length > 0 && (
+                <>
+                  <SectionDivider label="Transitioning in" count={incomingPending.length} colour="#2563eb" />
+                  {incomingPending.map((s, idx) => (
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                  ))}
+                </>
+              )}
+
+              {/* JOINED THIS WEEK — incoming whose transition date has arrived for the viewed week */}
+              {incomingPromoted.length > 0 && (
+                <>
+                  <SectionDivider label="Joined this week" count={incomingPromoted.length} colour="var(--accent)" />
+                  {incomingPromoted.map((s, idx) => (
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
+                  ))}
+                </>
+              )}
 
               {/* WAITLIST */}
               {waitlist.length > 0 && (
@@ -1311,7 +1309,7 @@ function EditableCapacity({ value, onSave }) {
 function SectionDivider({ label, count, colour }) {
   return (
     <tr style={{ background: 'var(--paper-2)' }}>
-      <td colSpan={22} className="px-3 py-1.5 sticky-col" style={{ background: 'var(--paper-2)', left: 0 }}>
+      <td colSpan={23} className="px-3 py-1.5 sticky-col" style={{ background: 'var(--paper-2)', left: 0 }}>
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider" style={{ color: colour }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: colour }} />
           {label}
