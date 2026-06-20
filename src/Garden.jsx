@@ -1219,7 +1219,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
   );
 }
 
-function EditableCell({ value, onSave, type = 'text', options, placeholder = '—', display, className = '', mono = false, faint = false }) {
+function EditableCell({ value, onSave, type = 'text', options, placeholder = '—', display, className = '', mono = false, faint = false, multiline = false }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value || '');
 
@@ -1262,10 +1262,10 @@ function EditableCell({ value, onSave, type = 'text', options, placeholder = '�
   return (
     <button
       onClick={() => setEditing(true)}
-      className={`text-left w-full hover:bg-stone-100 rounded px-1 py-0.5 truncate flex items-center gap-1 group ${className} ${mono ? 'font-mono' : ''}`}
+      className={`text-left w-full hover:bg-stone-100 rounded px-1 py-0.5 flex gap-1 group ${multiline ? 'items-start' : 'items-center truncate'} ${className} ${mono ? 'font-mono' : ''}`}
       style={{ color: isEmpty ? 'var(--ink-faint)' : (faint ? 'var(--ink-faint)' : 'var(--ink-soft)') }}>
-      <span className="truncate flex-1">{isEmpty ? <span className="italic opacity-50">{placeholder}</span> : shown}</span>
-      <Edit3 size={9} className="opacity-0 group-hover:opacity-40 shrink-0 transition" />
+      <span className={`flex-1 ${multiline ? 'whitespace-pre-line break-words min-w-0' : 'truncate'}`}>{isEmpty ? <span className="italic opacity-50">{placeholder}</span> : shown}</span>
+      <Edit3 size={9} className={`opacity-0 group-hover:opacity-40 shrink-0 transition ${multiline ? 'mt-0.5' : ''}`} />
     </button>
   );
 }
@@ -1882,7 +1882,7 @@ function EditableRow({ icon: Icon, label, value, onSave, type, display, multilin
       {Icon && <Icon size={12} className="mt-1.5 shrink-0" style={{ color: 'var(--ink-faint)' }} />}
       <span className="shrink-0 mt-1" style={{ color: 'var(--ink-faint)' }}>{label}:</span>
       <div className="flex-1 min-w-0">
-        <EditableCell value={value} onSave={onSave} type={type} display={display} />
+        <EditableCell value={value} onSave={onSave} type={type} display={display} multiline={multiline} />
       </div>
     </div>
   );
