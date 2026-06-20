@@ -1429,8 +1429,8 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
             <>
               <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
               <div
-                className="absolute left-0 top-full mt-1 z-50 rounded-md border shadow-lg py-1 min-w-max"
-                style={{ background: 'var(--paper)', borderColor: 'var(--line)' }}>
+                className="absolute left-0 bottom-full mb-1 z-50 rounded-md border shadow-xl py-1 min-w-max overflow-y-auto"
+                style={{ background: 'var(--paper)', borderColor: 'var(--line)', maxHeight: '260px' }}>
               {Object.entries(STATUSES).map(([k, v]) => (
                 <button
                   key={k}
