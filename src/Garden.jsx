@@ -1155,15 +1155,32 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <td colSpan={8}></td>
               </tr>
 
-              {/* INCOMING */}
-              {incoming.length > 0 && (
-                <>
-                  <SectionDivider label="Incoming" count={incoming.length} colour="#2563eb" />
-                  {incoming.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
-                  ))}
-                </>
-              )}
+              {/* INCOMING — split by whether their transition date has arrived for the viewed week */}
+              {(() => {
+                const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
+                const promoted = incoming.filter(s => weekFri && s.transitionDate && s.transitionDate <= weekFri);
+                const pending   = incoming.filter(s => !weekFri || !s.transitionDate || s.transitionDate > weekFri);
+                return (
+                  <>
+                    {promoted.length > 0 && (
+                      <>
+                        <SectionDivider label="Joined this week" count={promoted.length} colour="var(--accent)" />
+                        {promoted.map((s, idx) => (
+                          <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
+                        ))}
+                      </>
+                    )}
+                    {pending.length > 0 && (
+                      <>
+                        <SectionDivider label="Transitioning in" count={pending.length} colour="#2563eb" />
+                        {pending.map((s, idx) => (
+                          <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                        ))}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* WAITLIST */}
               {waitlist.length > 0 && (
