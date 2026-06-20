@@ -1020,7 +1020,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       </div>
 
       {/* The spreadsheet — horizontally scrollable with synced top scrollbar */}
-      <SpreadsheetWithTopScroll active={active} leavingSoon={leavingSoon} incoming={incomingStudents} waitlist={waitlist} left={left} totals={totals} students={students} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
+      <SpreadsheetWithTopScroll active={active} incoming={incomingStudents} waitlist={waitlist} left={left} totals={totals} students={students} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
 
       <div className="mt-4 text-xs flex items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
         <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → empty. Status cycles workflow. Scroll table sideways for more columns.
@@ -1029,7 +1029,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   );
 }
 
-function SpreadsheetWithTopScroll({ active, leavingSoon = [], incoming = [], waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft }) {
+function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft }) {
   const topRef = useRef(null);
   const bottomRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(1900);
