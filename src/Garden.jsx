@@ -675,6 +675,8 @@ function GardenApp() {
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [centre, setCentre] = useState('canggu');
+  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: true, sanur: false });
+  const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
   const [weekIdx, setWeekIdx] = useState(0);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
@@ -685,6 +687,13 @@ function GardenApp() {
   const [toast, setToast] = useState(null);
   const [showLeft, setShowLeft] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const CENTRE_PASSWORDS = { canggu: 'canggu2024', sanur: 'sanur2024' };
+
+  const handleCentreSwitch = (c) => {
+    if (centreUnlocked[c]) { setCentre(c); return; }
+    setCentreGateTarget(c);
+  };
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
@@ -931,8 +940,8 @@ function GardenApp() {
             <div className="px-3 pt-4">
               <div className="text-xs uppercase tracking-widest px-2 mb-2" style={{ color: 'var(--ink-faint)' }}>Centre</div>
               <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--line-soft)' }}>
-                <button onClick={() => setCentre('canggu')} className={`flex-1 text-xs py-1.5 rounded transition ${centre === 'canggu' ? 'bg-white shadow-sm font-medium' : 'opacity-70'}`}>Canggu</button>
-                <button onClick={() => setCentre('sanur')} className={`flex-1 text-xs py-1.5 rounded transition ${centre === 'sanur' ? 'bg-white shadow-sm font-medium' : 'opacity-70'}`}>Sanur</button>
+                <button onClick={() => handleCentreSwitch('canggu')} className={`flex-1 text-xs py-1.5 rounded transition ${centre === 'canggu' ? 'bg-white shadow-sm font-medium' : 'opacity-70'}`}>Canggu</button>
+                <button onClick={() => handleCentreSwitch('sanur')} className={`flex-1 text-xs py-1.5 rounded transition ${centre === 'sanur' ? 'bg-white shadow-sm font-medium' : 'opacity-70'}`}>Sanur</button>
               </div>
             </div>
             <nav className="px-3 pt-5 flex-1 overflow-y-auto">
@@ -1093,6 +1102,18 @@ function GardenApp() {
         }} />}
         {addClassOpen && <AddOrEditClassModal onClose={() => setAddClassOpen(false)} onSave={c => { addClass(c); setAddClassOpen(false); }} />}
         {editingClass && <AddOrEditClassModal existing={editingClass} onClose={() => setEditingClass(null)} onSave={c => { updateClass(editingClass.id, c); setEditingClass(null); }} onDelete={() => { deleteClass(editingClass.id); setEditingClass(null); }} />}
+        {centreGateTarget && (
+          <CentrePasswordGate
+            centre={centreGateTarget}
+            correctPassword={CENTRE_PASSWORDS[centreGateTarget]}
+            onSuccess={() => {
+              setCentreUnlocked(prev => ({ ...prev, [centreGateTarget]: true }));
+              setCentre(centreGateTarget);
+              setCentreGateTarget(null);
+            }}
+            onClose={() => setCentreGateTarget(null)}
+          />
+        )}
 
         {toast && (
           <div className="fixed bottom-6 right-6 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm" style={{ background: 'var(--ink)', color: 'white' }}>
@@ -3549,6 +3570,43 @@ function NavItem({ icon: Icon, label, active, onClick, badge }) {
 // ============================================================
 // PASSWORD GATE
 // ============================================================
+
+function CentrePasswordGate({ centre, correctPassword, onSuccess, onClose }) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState(false);
+  const label = centre === 'canggu' ? 'Canggu' : 'Sanur';
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (value === correctPassword) { onSuccess(); }
+    else { setError(true); setValue(''); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(27,26,23,0.6)' }}>
+      <form onSubmit={submit} className="rounded-xl shadow-2xl w-full max-w-sm p-8" style={{ background: 'var(--paper)' }}>
+        <div className="text-center mb-6">
+          <div className="font-display text-2xl mb-1">{label}</div>
+          <div className="text-sm" style={{ color: 'var(--ink-faint)' }}>Enter the {label} centre code to continue</div>
+        </div>
+        <input
+          autoFocus
+          type="password"
+          value={value}
+          onChange={e => { setValue(e.target.value); setError(false); }}
+          placeholder="Centre code"
+          className="w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 mb-1"
+          style={{ borderColor: error ? '#dc2626' : 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }}
+        />
+        {error && <p className="text-xs mb-3" style={{ color: '#dc2626' }}>Incorrect code. Try again.</p>}
+        <div className="flex gap-2 mt-4">
+          <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border text-sm hover:bg-stone-50 transition" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+          <button type="submit" className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white transition hover:opacity-90" style={{ background: 'var(--accent)' }}>Unlock</button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 const GATE_PASSWORD = 'thegardenstudents2024';
 const GATE_KEY = 'garden_auth';
