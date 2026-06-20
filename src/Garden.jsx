@@ -23,16 +23,22 @@ function useClasses() { return React.useContext(ClassesContext); }
 
 const CLASS_COLOURS = ['#FBBF24','#FDE68A','#FDA4AF','#FB923C','#C4B5FD','#6EE7B7','#7DD3FC','#F472B6','#A78BFA','#34D399','#FCD34D','#FB7185'];
 
+const PAST_WEEKS = 26; // how many weeks back to show
+
 function buildWeeks() {
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const today = new Date();
   const dow = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + (dow === 0 ? -6 : 1 - dow));
-  monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 52 }, (_, i) => {
-    const mon = new Date(monday);
-    mon.setDate(monday.getDate() + i * 7);
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() + (dow === 0 ? -6 : 1 - dow));
+  thisMonday.setHours(0, 0, 0, 0);
+  // Start PAST_WEEKS weeks before current Monday
+  const firstMonday = new Date(thisMonday);
+  firstMonday.setDate(thisMonday.getDate() - PAST_WEEKS * 7);
+  const total = PAST_WEEKS + 1 + 25; // 26 past + current + 25 future = 52
+  return Array.from({ length: total }, (_, i) => {
+    const mon = new Date(firstMonday);
+    mon.setDate(firstMonday.getDate() + i * 7);
     const fri = new Date(mon);
     fri.setDate(mon.getDate() + 4);
     const monIso = mon.toISOString().slice(0, 10);
@@ -40,10 +46,11 @@ function buildWeeks() {
     const label = mon.getMonth() === fri.getMonth()
       ? `${mon.getDate()} – ${fri.getDate()} ${M[mon.getMonth()]} ${mon.getFullYear()}`
       : `${mon.getDate()} ${M[mon.getMonth()]} – ${fri.getDate()} ${M[fri.getMonth()]} ${fri.getFullYear()}`;
-    return { id: `w${i + 1}`, label, monDate: monIso, friDate: friIso, current: i === 0 };
+    return { id: `w${i + 1}`, label, monDate: monIso, friDate: friIso, current: i === PAST_WEEKS };
   });
 }
 const WEEKS = buildWeeks();
+const TODAY_WEEK_IDX = PAST_WEEKS; // index of the current week in WEEKS
 
 const STATUSES = {
   enrolled:          { label: 'Enrolled',          dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
@@ -678,7 +685,7 @@ function GardenApp() {
   const [centreUnlocked, setCentreUnlocked] = useState({ canggu: true, sanur: false });
   const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
-  const [weekIdx, setWeekIdx] = useState(0);
+  const [weekIdx, setWeekIdx] = useState(TODAY_WEEK_IDX);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [view, setView] = useState('class');
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -1132,6 +1139,17 @@ function GardenApp() {
 function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, searchTerm = '', onExportAll }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeStatusFilters, setActiveStatusFilters] = useState([]);
+  const currentTabRef = useRef(null);
+
+  // Scroll current week tab into view on first render
+  useEffect(() => {
+    currentTabRef.current?.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'center' });
+  }, []);
+
+  const scrollToToday = () => {
+    setWeekIdx(TODAY_WEEK_IDX);
+    setTimeout(() => currentTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+  };
 
   const toggleStatusFilter = (key) => {
     setActiveStatusFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -1238,15 +1256,42 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       </div>
 
       {/* Week tabs */}
-      <div className="overflow-x-auto mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
-        <div className="flex items-center gap-1 w-max">
-          {WEEKS.map((w, i) => (
-            <button key={w.id} onClick={() => setWeekIdx(i)} className={`px-4 py-2 text-sm border-b-2 transition -mb-px shrink-0 ${i === weekIdx ? 'border-current font-medium' : 'border-transparent opacity-60 hover:opacity-100'}`} style={i === weekIdx ? { color: 'var(--ink)', borderColor: 'var(--ink)' } : { color: 'var(--ink-soft)' }}>
-              <span className="font-mono text-xs mr-2 opacity-60">W{i + 1}</span>
-              {w.label}
-              {w.current && <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+      {/* Week navigation */}
+      <div className="mb-4 border-b" style={{ borderColor: 'var(--line)' }}>
+        <div className="flex items-center gap-2">
+          <div className="overflow-x-auto flex-1">
+            <div className="flex items-center gap-1 w-max">
+              {WEEKS.map((w, i) => {
+                const isToday = i === TODAY_WEEK_IDX;
+                const isActive = i === weekIdx;
+                return (
+                  <button
+                    key={w.id}
+                    ref={isToday ? currentTabRef : null}
+                    onClick={() => setWeekIdx(i)}
+                    className={`px-4 py-2.5 text-sm border-b-2 transition -mb-px shrink-0 ${isActive && !isToday ? 'font-semibold' : ''} ${!isActive && !isToday ? 'border-transparent opacity-50 hover:opacity-80' : ''}`}
+                    style={isToday && isActive
+                      ? { color: '#fff', background: 'var(--accent)', borderColor: 'var(--accent)', borderRadius: '6px 6px 0 0', fontWeight: 700 }
+                      : isToday
+                        ? { color: 'var(--accent)', borderColor: 'var(--accent)', fontWeight: 600 }
+                        : isActive
+                          ? { color: 'var(--ink)', borderColor: 'var(--ink)' }
+                          : { color: 'var(--ink-soft)' }}>
+                    <span className="font-mono text-xs mr-2 opacity-60">{isToday ? '★' : `W${i + 1}`}</span>
+                    {w.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {weekIdx !== TODAY_WEEK_IDX && (
+            <button
+              onClick={scrollToToday}
+              className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md text-white font-medium transition hover:opacity-90 mr-1"
+              style={{ background: 'var(--accent)' }}>
+              <Calendar size={11} /> Current week
             </button>
-          ))}
+          )}
         </div>
       </div>
 
