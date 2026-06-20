@@ -46,14 +46,15 @@ function buildWeeks() {
 const WEEKS = buildWeeks();
 
 const STATUSES = {
-  enrolled:    { label: 'Enrolled',         dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-  inquiry:     { label: 'Inquiry',          dot: 'bg-slate-400',   chip: 'bg-slate-50 text-slate-700 border-slate-200' },
-  quote_sent:  { label: 'Quote sent',       dot: 'bg-amber-500',   chip: 'bg-amber-50 text-amber-800 border-amber-200' },
-  invoice_sent:{ label: 'Invoice awaiting', dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-800 border-orange-200' },
-  wait_list:   { label: 'Wait list',        dot: 'bg-violet-500',  chip: 'bg-violet-50 text-violet-800 border-violet-200' },
-  suspended:   { label: 'On suspension',    dot: 'bg-blue-500',    chip: 'bg-blue-50 text-blue-800 border-blue-200' },
-  left:        { label: 'Left',             dot: 'bg-stone-400',   chip: 'bg-stone-50 text-stone-600 border-stone-200' },
-  cancelled:   { label: 'Cancelled',        dot: 'bg-stone-400',   chip: 'bg-stone-50 text-stone-600 border-stone-200' },
+  enrolled:          { label: 'Enrolled',          dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  inquiry:           { label: 'Inquiry',           dot: 'bg-slate-400',   chip: 'bg-slate-50 text-slate-700 border-slate-200' },
+  quote_sent:        { label: 'Quote sent',        dot: 'bg-amber-500',   chip: 'bg-amber-50 text-amber-800 border-amber-200' },
+  invoice_sent:      { label: 'Invoice sent',      dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-800 border-orange-200' },
+  wait_list:         { label: 'Wait list',         dot: 'bg-violet-500',  chip: 'bg-violet-50 text-violet-800 border-violet-200' },
+  suspended:         { label: 'On suspension',     dot: 'bg-blue-500',    chip: 'bg-blue-50 text-blue-800 border-blue-200' },
+  extended_holiday:  { label: 'Extended holiday',  dot: 'bg-cyan-500',    chip: 'bg-cyan-50 text-cyan-800 border-cyan-200' },
+  left:              { label: 'Left',              dot: 'bg-stone-400',   chip: 'bg-stone-50 text-stone-600 border-stone-200' },
+  cancelled:         { label: 'Cancelled',         dot: 'bg-stone-400',   chip: 'bg-stone-50 text-stone-600 border-stone-200' },
 };
 
 const INVOICE_STATUSES = {
@@ -1135,12 +1136,12 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const filteredStudents = filterByStatus(students.filter(matchesSearch));
   const filteredIncoming = incomingStudents.filter(matchesSearch);
 
-  const active = filteredStudents.filter(s => ['enrolled','suspended'].includes(s.status));
+  const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
   const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
   const enrolledCount = students.filter(s => s.status === 'enrolled').length;
-  const suspendedCount = students.filter(s => s.status === 'suspended').length;
+  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status)).length;
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
@@ -1164,7 +1165,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
               <span className={`w-2 h-2 rounded-full ${capWarn ? 'bg-red-500' : 'bg-emerald-500'}`} />
               <span className="font-mono">{enrolledCount}/<EditableCapacity value={currentClass.capacity} onSave={n => onUpdateClass(currentClass.id, { capacity: n })} /></span> enrolled
             </span>
-            {suspendedCount > 0 && (<><span className="opacity-30">·</span><span className="font-mono">{suspendedCount}</span> on suspension</>)}
+            {suspendedCount > 0 && (<><span className="opacity-30">·</span><span className="font-mono">{suspendedCount}</span> on suspension / extended holiday</>)}
             <span className="opacity-30">·</span>
             <span><span className="font-mono">{waitlist.length}</span> in pipeline</span>
           </div>
@@ -2642,7 +2643,7 @@ function DashboardView({ students, onJump }) {
   const totalEnrolled = students.filter(s => s.status === 'enrolled').length;
   const totalInquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent'].includes(s.status)).length;
   const waitList = students.filter(s => s.status === 'wait_list').length;
-  const suspended = students.filter(s => s.status === 'suspended').length;
+  const suspended = students.filter(s => ['suspended','extended_holiday'].includes(s.status)).length;
   const followUps = students.filter(s => ['quote_sent','invoice_sent'].includes(s.status));
   const prepayExpiring = students.filter(s => s.prepay && (s.prepay.weeks - s.prepay.completed) <= 5);
 
@@ -2767,9 +2768,9 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
   const updateField = (k, v) => setParsed(p => ({ ...p, [k]: v }));
 
   // Move inquiry to next status stage
-  const advance = (id, currentStatus) => {
-    const order = { inquiry: 'quote_sent', quote_sent: 'invoice_sent', invoice_sent: 'enrolled', wait_list: 'enrolled' };
-    onUpdate(id, { status: order[currentStatus] || currentStatus });
+  const advance = (id, currentStatus, target) => {
+    const order = { inquiry: 'quote_sent', quote_sent: 'invoice_sent', wait_list: 'enrolled' };
+    onUpdate(id, { status: target || order[currentStatus] || currentStatus });
   };
 
   return (
@@ -2930,7 +2931,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
       {['inquiry','quote_sent','invoice_sent','wait_list'].map(st => {
         const list = inquiries.filter(s => s.status === st);
         const status = STATUSES[st];
-        const nextLabel = { inquiry: 'Send quote', quote_sent: 'Send invoice', invoice_sent: 'Mark enrolled', wait_list: 'Enrol now' }[st];
+        const nextLabel = { inquiry: 'Quote sent', quote_sent: 'Invoice sent', wait_list: 'Enrol now' }[st];
 
         return (
           <div key={st} className="mb-6">
@@ -2956,9 +2957,20 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                     </button>
                     <div className="text-xs max-w-md mr-4 truncate" style={{ color: 'var(--ink-soft)' }}>{s.note || ''}</div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => advance(s.id, s.status)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium transition hover:opacity-90 flex items-center gap-1" style={{ background: 'var(--accent)' }}>
-                        {nextLabel} <ArrowRight size={11} />
-                      </button>
+                      {st === 'invoice_sent' ? (
+                        <>
+                          <button onClick={() => advance(s.id, s.status, 'enrolled')} className="text-xs px-3 py-1.5 rounded-md text-white font-medium transition hover:opacity-90 flex items-center gap-1" style={{ background: 'var(--accent)' }}>
+                            Enrolled <ArrowRight size={11} />
+                          </button>
+                          <button onClick={() => advance(s.id, s.status, 'wait_list')} className="text-xs px-3 py-1.5 rounded-md font-medium transition hover:opacity-90 flex items-center gap-1 bg-violet-50 text-violet-800 border border-violet-200 hover:bg-violet-100">
+                            Wait list <ArrowRight size={11} />
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => advance(s.id, s.status)} className="text-xs px-3 py-1.5 rounded-md text-white font-medium transition hover:opacity-90 flex items-center gap-1" style={{ background: 'var(--accent)' }}>
+                          {nextLabel} <ArrowRight size={11} />
+                        </button>
+                      )}
                       <button onClick={() => onSelectStudent(s.id)} className="text-xs px-2 py-1.5 rounded-md border hover:bg-stone-50" style={{ borderColor: 'var(--line)' }}>
                         Edit
                       </button>
