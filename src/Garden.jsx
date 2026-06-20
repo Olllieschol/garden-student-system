@@ -2648,7 +2648,7 @@ function DashboardView({ students, onJump }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-8 pt-7 pb-16">
-      <div className="font-display text-4xl mb-7">Today, Thursday 21 May</div>
+      <div className="font-display text-4xl mb-7">Today, {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
 
       <div className="grid grid-cols-4 gap-4 mb-8">
         <DashStat label="Enrolled" value={totalEnrolled} accent="var(--accent)" />
@@ -3312,7 +3312,7 @@ function SettingsView() {
       <div className="font-display text-4xl mb-7">Settings</div>
       <div className="space-y-4 max-w-2xl">
         <SettingsCard title="Classes" desc="Add, rename, or change capacity for any class. Changes propagate everywhere." />
-        <SettingsCard title="Custom student fields" desc="Add custom fields to the student record (swim ability, preferred nap time, etc)." />
+        <SettingsCard title="Custom student fields" desc="Add custom fields to the student record (swim ability, preferred nap time, etc.)." />
         <SettingsCard title="Staff & permissions" desc="Manage 34 staff logins. Set role (admin / manager / teacher / accountant) and which centre they can access." />
         <SettingsCard title="Email parser mapping" desc="Customise which Squarespace fields map to which student fields, for when Squarespace adds new questions." />
         <SettingsCard title="Holiday suspension policy" desc="Currently 4 per child per calendar year. Change the cap or add custom rules." />
