@@ -90,7 +90,7 @@ const SEED_STUDENTS = [
   { id: 2, name: 'Theo Marais', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-07-22', nationality: 'French', parents: 'Camille / Luc', phone: '+62 ••• 8819 (M)', email: 'camille@example.com',
     mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: true,
-    note: 'Transitioning to PK Saffron in July', dietaryFlags: [], transitionTo: 'pks',
+    note: '', dietaryFlags: [], transitionTo: 'pks', transitionDate: '2026-07-07',
     suspensions: [],
     originalStart: '2025-09-15', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-09-10', bondAmount: 5000000,
@@ -566,7 +566,23 @@ function GardenApp() {
   const [toast, setToast] = useState(null);
   const [showLeft, setShowLeft] = useState(false);
 
-  const visibleStudents = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived);
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Auto-complete transitions whose date has arrived
+  useEffect(() => {
+    students.forEach(s => {
+      if (s.transitionTo && s.transitionDate && s.transitionDate <= todayIso) {
+        updateStudent(s.id, { classId: s.transitionTo, transitionTo: null, transitionDate: null });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayIso]);
+
+  // Own-class students + incoming students (pending transitions into this class)
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived);
+  const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
+  const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
+
   const currentClass = classes.find(c => c.id === currentClassId);
 
   // Close detail panel whenever class or page changes
@@ -852,7 +868,8 @@ function GardenApp() {
             {view === 'class' && (
               <ClassView
                 currentClass={currentClass}
-                students={visibleStudents}
+                students={ownStudents}
+                incomingStudents={incomingStudents.filter(s => s.classId !== currentClassId)}
                 weekIdx={weekIdx} setWeekIdx={setWeekIdx}
                 onCycleDay={cycleDay} onUpdate={updateStudent}
                 onSelectStudent={setSelectedStudentId}
@@ -934,8 +951,9 @@ function GardenApp() {
 // CLASS VIEW (the meaty one)
 // ============================================================
 
-function ClassView({ currentClass, students, weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass }) {
-  const active = students.filter(s => ['enrolled','suspended'].includes(s.status));
+function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass }) {
+  const active = students.filter(s => ['enrolled','suspended'].includes(s.status) && !s.transitionTo);
+  const leavingSoon = students.filter(s => ['enrolled','suspended'].includes(s.status) && s.transitionTo);
   const waitlist = students.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = students.filter(s => ['left','cancelled'].includes(s.status));
 
@@ -1003,7 +1021,7 @@ function ClassView({ currentClass, students, weekIdx, setWeekIdx, onCycleDay, on
       </div>
 
       {/* The spreadsheet — horizontally scrollable with synced top scrollbar */}
-      <SpreadsheetWithTopScroll active={active} waitlist={waitlist} left={left} totals={totals} students={students} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
+      <SpreadsheetWithTopScroll active={active} leavingSoon={leavingSoon} incoming={incomingStudents} waitlist={waitlist} left={left} totals={totals} students={students} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
 
       <div className="mt-4 text-xs flex items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
         <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → empty. Status cycles workflow. Scroll table sideways for more columns.
@@ -1012,7 +1030,7 @@ function ClassView({ currentClass, students, weekIdx, setWeekIdx, onCycleDay, on
   );
 }
 
-function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft }) {
+function SpreadsheetWithTopScroll({ active, leavingSoon = [], incoming = [], waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft }) {
   const topRef = useRef(null);
   const bottomRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(1900);
@@ -1064,7 +1082,7 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
 
       <div className="rounded-b-lg border overflow-hidden" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
         <div ref={bottomRef} className="ss-table-container overflow-x-auto">
-          <table className="text-sm" style={{ minWidth: '2010px' }}>
+          <table className="text-sm" style={{ minWidth: '2150px' }}>
             <colgroup>
               <col style={{ width: '40px' }} />
               <col style={{ width: '240px' }} />
@@ -1086,7 +1104,8 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
               <col style={{ width: '110px' }} />
               <col style={{ width: '120px' }} />
               <col style={{ width: '160px' }} />
-              <col style={{ width: '220px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '170px' }} />
               <col style={{ width: '70px' }} />
             </colgroup>
             <thead>
@@ -1112,6 +1131,7 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
                 <th className="text-left font-medium px-3 py-2.5">Invoice</th>
                 <th className="text-left font-medium px-3 py-2.5">Parents</th>
                 <th className="text-left font-medium px-3 py-2.5">Note</th>
+                <th className="text-left font-medium px-3 py-2.5">Transition</th>
                 <th className="text-center font-medium px-2 py-2.5">HS/yr</th>
               </tr>
             </thead>
@@ -1133,8 +1153,28 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
                   </td>
                 ))}
                 <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch).length}</td>
-                <td colSpan={7}></td>
+                <td colSpan={8}></td>
               </tr>
+
+              {/* LEAVING SOON */}
+              {leavingSoon.length > 0 && (
+                <>
+                  <SectionDivider label="Leaving soon" count={leavingSoon.length} colour="#b45309" />
+                  {leavingSoon.map((s, idx) => (
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                  ))}
+                </>
+              )}
+
+              {/* INCOMING */}
+              {incoming.length > 0 && (
+                <>
+                  <SectionDivider label="Incoming" count={incoming.length} colour="#2563eb" />
+                  {incoming.map((s, idx) => (
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                  ))}
+                </>
+              )}
 
               {/* WAITLIST */}
               {waitlist.length > 0 && (
@@ -1150,7 +1190,7 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
               {left.length > 0 && (
                 <>
                   <tr className="border-t" style={{ borderColor: 'var(--line)' }}>
-                    <td colSpan={22} className="px-3 py-1.5 sticky-col" style={{ background: 'var(--paper-2)' }}>
+                    <td colSpan={23} className="px-3 py-1.5 sticky-col" style={{ background: 'var(--paper-2)' }}>
                       <button onClick={() => setShowLeft(o => !o)} className="flex items-center gap-2 text-xs uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>
                         {showLeft ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                         Recently left
@@ -1164,8 +1204,8 @@ function SpreadsheetWithTopScroll({ active, waitlist, left, totals, students, we
                 </>
               )}
 
-              {students.length === 0 && (
-                <tr><td colSpan={22} className="px-4 py-12 text-center text-sm" style={{ color: 'var(--ink-faint)' }}>No students in this class yet.</td></tr>
+              {students.length === 0 && incoming.length === 0 && (
+                <tr><td colSpan={23} className="px-4 py-12 text-center text-sm" style={{ color: 'var(--ink-faint)' }}>No students in this class yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -1451,12 +1491,96 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
       </td>
+      <td className="px-2 py-2 text-xs">
+        <TransitionCell student={student} />
+      </td>
       <td className="px-2 py-2 text-center">
         <span className={`inline-flex items-center justify-center w-7 h-6 rounded text-xs font-mono font-medium ${susCount >= 4 ? 'bg-red-100 text-red-700' : susCount === 3 ? 'bg-amber-100 text-amber-800' : 'text-stone-500'}`}>
           {susCount}/4
         </span>
       </td>
     </tr>
+  );
+}
+
+function TransitionCell({ student }) {
+  const { classes } = useClasses();
+  if (!student.transitionTo) return <span style={{ color: 'var(--ink-faint)' }}>—</span>;
+  const dest = classes.find(c => c.id === student.transitionTo);
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium" style={{ color: '#b45309' }}>
+      <ArrowRight size={10} />
+      {dest?.name || student.transitionTo}
+      {student.transitionDate && <span className="font-mono opacity-70 ml-1">{shortDate(student.transitionDate)}</span>}
+    </span>
+  );
+}
+
+function MoveClassSection({ student, onUpdate }) {
+  const { classes } = useClasses();
+  const [open, setOpen] = useState(false);
+  const [destId, setDestId] = useState('');
+  const [date, setDate] = useState('');
+
+  React.useEffect(() => {
+    if (student.transitionTo) { setDestId(student.transitionTo); setDate(student.transitionDate || ''); }
+    else { setDestId(''); setDate(''); }
+  }, [student.id, student.transitionTo, student.transitionDate]);
+
+  const save = () => {
+    if (!destId) return;
+    onUpdate({ transitionTo: destId, transitionDate: date || null });
+    setOpen(false);
+  };
+  const cancel = () => {
+    onUpdate({ transitionTo: null, transitionDate: null });
+    setDestId(''); setDate('');
+  };
+  const otherClasses = classes.filter(c => c.id !== student.classId);
+  const destClass = classes.find(c => c.id === student.transitionTo);
+
+  return (
+    <Section title="Move class">
+      {student.transitionTo && !open ? (
+        <div className="rounded-md p-3 mb-2" style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.2)' }}>
+          <div className="text-xs font-medium mb-0.5" style={{ color: '#b45309' }}>
+            <ArrowRight size={11} className="inline mr-1" />
+            Moving to {destClass?.fullName || student.transitionTo}
+          </div>
+          {student.transitionDate && (
+            <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>On {shortDate(student.transitionDate)}</div>
+          )}
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setOpen(true)} className="text-xs px-2 py-1 rounded border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>Edit</button>
+            <button onClick={cancel} className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 transition" style={{ borderColor: 'var(--line)' }}>Cancel move</button>
+          </div>
+        </div>
+      ) : open || !student.transitionTo ? (
+        open ? (
+          <div className="flex flex-col gap-2">
+            <div>
+              <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Moving to</label>
+              <select value={destId} onChange={e => setDestId(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }}>
+                <option value="">— pick a class —</option>
+                {otherClasses.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Transition date</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }} />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={save} disabled={!destId} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>Save move</button>
+              <button onClick={() => setOpen(false)} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setOpen(true)} className="w-full py-1.5 rounded border border-dashed text-xs flex items-center justify-center gap-1.5 hover:bg-stone-50 transition" style={{ borderColor: 'var(--line)', color: 'var(--ink-soft)' }}>
+            <ArrowRight size={11} /> Set class transition
+          </button>
+        )
+      ) : null}
+    </Section>
   );
 }
 
@@ -1658,6 +1782,8 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             ))}
           </Section>
         )}
+
+        <MoveClassSection student={student} onUpdate={(patch) => onUpdate(student.id, patch)} />
 
         <Section title="Change status">
           <div className="grid grid-cols-2 gap-1.5">
