@@ -1640,7 +1640,8 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
               <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
               <div
                 className="absolute left-0 bottom-full mb-1 z-50 rounded-md border shadow-xl py-1 min-w-max overflow-y-auto"
-                style={{ background: 'var(--paper)', borderColor: 'var(--line)', maxHeight: '260px' }}>
+                style={{ background: 'var(--paper)', borderColor: 'var(--line)', maxHeight: '320px', overscrollBehavior: 'contain' }}
+                onWheel={e => e.stopPropagation()}>
               {Object.entries(STATUSES).map(([k, v]) => (
                 <button
                   key={k}
