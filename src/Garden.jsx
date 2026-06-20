@@ -2175,7 +2175,7 @@ function EmailParseModal({ onClose, onConfirm }) {
             </div>
             <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--line)' }}>
               <button onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-stone-100">Cancel</button>
-              <button onClick={handleParse} className="px-4 py-2 text-sm rounded-md text-white font-medium" style={{ background: 'var(--accent)' }}>Parse email →</button>
+              <button onClick={handleParse} className="px-4 py-2 text-sm rounded-md text-white font-medium" style={{ background: 'var(--accent)' }}>Extract details →</button>
             </div>
           </>
         )}
@@ -2809,7 +2809,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                 <button onClick={() => setEmailText(EXAMPLE_EMAIL)} className="text-xs hover:underline" style={{ color: 'var(--ink-faint)' }}>Try a sample email →</button>
                 <div className="flex gap-2">
                   <button onClick={() => { setPaneOpen(false); setEmailText(''); }} className="px-3 py-1.5 text-sm rounded-md hover:bg-stone-100">Cancel</button>
-                  <button onClick={handleParse} disabled={!emailText.trim()} className="px-4 py-1.5 text-sm rounded-md text-white font-medium disabled:opacity-30" style={{ background: 'var(--accent)' }}>Parse email →</button>
+                  <button onClick={handleParse} disabled={!emailText.trim()} className="px-4 py-1.5 text-sm rounded-md text-white font-medium disabled:opacity-30" style={{ background: 'var(--accent)' }}>Extract details →</button>
                 </div>
               </div>
             </div>
