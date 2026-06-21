@@ -1989,68 +1989,118 @@ function TransitionCell({ student, onUpdate }) {
 
 function MoveClassSection({ student, onUpdate }) {
   const { classes } = useClasses();
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState(null); // null | 'now' | 'later'
   const [destId, setDestId] = useState('');
   const [date, setDate] = useState('');
+  const [newStatus, setNewStatus] = useState('enrolled');
 
   React.useEffect(() => {
-    if (student.transitionTo) { setDestId(student.transitionTo); setDate(student.transitionDate || ''); }
-    else { setDestId(''); setDate(''); }
-  }, [student.id, student.transitionTo, student.transitionDate]);
+    setMode(null);
+    setDestId(student.transitionTo || '');
+    setDate(student.transitionDate || '');
+    setNewStatus('enrolled');
+  }, [student.id]);
 
-  const save = () => {
+  const moveNow = () => {
+    if (!destId) return;
+    onUpdate({ classId: destId, status: newStatus, transitionTo: null, transitionDate: null });
+    setMode(null);
+  };
+  const saveLater = () => {
     if (!destId) return;
     onUpdate({ transitionTo: destId, transitionDate: date || null });
-    setOpen(false);
+    setMode(null);
   };
-  const cancel = () => {
+  const cancelTransition = () => {
     onUpdate({ transitionTo: null, transitionDate: null });
     setDestId(''); setDate('');
   };
+
   const otherClasses = classes.filter(c => c.id !== student.classId);
   const destClass = classes.find(c => c.id === student.transitionTo);
 
   return (
     <Section title="Move class">
-      {student.transitionTo && !open ? (
+      {/* Pending transition banner */}
+      {student.transitionTo && mode === null && (
         <div className="rounded-md p-3 mb-2" style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.2)' }}>
           <div className="text-xs font-medium mb-0.5" style={{ color: '#b45309' }}>
             <ArrowRight size={11} className="inline mr-1" />
             Moving to {destClass?.fullName || student.transitionTo}
           </div>
-          {student.transitionDate && (
-            <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>On {shortDate(student.transitionDate)}</div>
-          )}
+          {student.transitionDate && <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>On {shortDate(student.transitionDate)}</div>}
           <div className="flex gap-2 mt-2">
-            <button onClick={() => setOpen(true)} className="text-xs px-2 py-1 rounded border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>Edit</button>
-            <button onClick={cancel} className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 transition" style={{ borderColor: 'var(--line)' }}>Cancel move</button>
+            <button onClick={() => { setDestId(student.transitionTo); setDate(student.transitionDate || ''); setMode('later'); }} className="text-xs px-2 py-1 rounded border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>Edit</button>
+            <button onClick={cancelTransition} className="text-xs px-2 py-1 rounded border text-red-600 hover:bg-red-50 transition" style={{ borderColor: 'var(--line)' }}>Cancel move</button>
           </div>
         </div>
-      ) : open || !student.transitionTo ? (
-        open ? (
-          <div className="flex flex-col gap-2">
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Moving to</label>
-              <select value={destId} onChange={e => setDestId(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }}>
-                <option value="">— pick a class —</option>
-                {otherClasses.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Transition date</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }} />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={save} disabled={!destId} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>Save move</button>
-              <button onClick={() => setOpen(false)} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+      )}
+
+      {/* Action buttons when idle */}
+      {mode === null && (
+        <div className="flex gap-2">
+          <button onClick={() => { setDestId(''); setNewStatus('enrolled'); setMode('now'); }}
+            className="flex-1 py-1.5 rounded text-xs font-medium text-white flex items-center justify-center gap-1.5 transition hover:opacity-90"
+            style={{ background: 'var(--accent)' }}>
+            <ArrowRight size={11} /> Move now
+          </button>
+          <button onClick={() => { setDestId(student.transitionTo || ''); setDate(student.transitionDate || ''); setMode('later'); }}
+            className="flex-1 py-1.5 rounded border text-xs flex items-center justify-center gap-1.5 hover:bg-stone-50 transition"
+            style={{ borderColor: 'var(--line)', color: 'var(--ink-soft)' }}>
+            <Calendar size={11} /> Schedule move
+          </button>
+        </div>
+      )}
+
+      {/* Move now form */}
+      {mode === 'now' && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Move to class</label>
+            <select value={destId} onChange={e => setDestId(e.target.value)} autoFocus className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }}>
+              <option value="">— pick a class —</option>
+              {otherClasses.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Status after move</label>
+            <div className="flex gap-1.5">
+              {['enrolled', 'wait_list'].map(s => (
+                <button key={s} type="button" onClick={() => setNewStatus(s)}
+                  className={`flex-1 py-1.5 rounded text-xs border transition ${newStatus === s ? 'font-semibold' : 'hover:bg-stone-50'}`}
+                  style={newStatus === s ? { borderColor: 'var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)' } : { borderColor: 'var(--line)' }}>
+                  {s === 'enrolled' ? 'Enrolled' : 'Wait list'}
+                </button>
+              ))}
             </div>
           </div>
-        ) : (
-          <button onClick={() => setOpen(true)} className="w-full py-1.5 rounded border border-dashed text-xs flex items-center justify-center gap-1.5 hover:bg-stone-50 transition" style={{ borderColor: 'var(--line)', color: 'var(--ink-soft)' }}>
-            <ArrowRight size={11} /> Set class transition
-          </button>
-        )
-      ) : null}
+          <div className="flex gap-2">
+            <button onClick={moveNow} disabled={!destId} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>Move now</button>
+            <button onClick={() => setMode(null)} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule move form */}
+      {mode === 'later' && (
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Moving to</label>
+            <select value={destId} onChange={e => setDestId(e.target.value)} autoFocus className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }}>
+              <option value="">— pick a class —</option>
+              {otherClasses.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Transition date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveLater} disabled={!destId} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>Save</button>
+            <button onClick={() => setMode(null)} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+          </div>
+        </div>
+      )}
     </Section>
   );
 }
