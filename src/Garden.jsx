@@ -1187,7 +1187,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   );
 
   return (
-    <ClassesContext.Provider value={{ classes, setClasses, addClass, updateClass, deleteClass }}>
+    <ClassesContext.Provider value={{ classes: [...classes].sort((a, b) => { const ai = INITIAL_CLASSES.findIndex(c => c.id === a.id); const bi = INITIAL_CLASSES.findIndex(c => c.id === b.id); return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi); }), setClasses, addClass, updateClass, deleteClass }}>
       <style>{FONT_IMPORT + `
         :root {
           --bg: #FAF6EF;
