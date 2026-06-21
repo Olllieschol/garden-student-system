@@ -1414,20 +1414,32 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
     return arr.filter(s => activeStatusFilters.includes(s.status));
   };
 
-  const filteredStudents = filterByStatus(students.filter(matchesSearch));
-  const filteredIncoming = incomingStudents.filter(matchesSearch);
+  // Week date range for the currently viewed week
+  const weekMon = WEEKS[weekIdx]?.monDate;
+  const weekFriDate = weekMon ? isoAddDays(weekMon, 4) : null;
+
+  // A student is "active in this week" if:
+  //   - their Started date is on or before the Friday of this week (or not set)
+  //   - their Last Day is on or after the Monday of this week (or not set)
+  const inWeek = (s) => {
+    if (weekMon && s.originalStart && s.originalStart > weekFriDate) return false;
+    if (weekFriDate && s.lastDate && s.lastDate < weekMon) return false;
+    return true;
+  };
+
+  const filteredStudents = filterByStatus(students.filter(matchesSearch).filter(inWeek));
+  const filteredIncoming = incomingStudents.filter(matchesSearch).filter(inWeek);
 
   const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
   const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
-  const enrolledCount = students.filter(s => s.status === 'enrolled').length;
-  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status)).length;
+  const enrolledCount = students.filter(s => s.status === 'enrolled' && inWeek(s)).length;
+  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && inWeek(s)).length;
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
   // Daily totals — count F and H per day, excluding students on suspension that day
-  const weekMon = WEEKS[weekIdx]?.monDate;
   const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
     const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
     const activeNotSuspended = active.filter(s => {
