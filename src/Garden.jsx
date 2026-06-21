@@ -1178,7 +1178,8 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 {classesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
               {classesOpen && classes.map(c => {
-                const enrolled = students.filter(s => s.centre === centre && s.classId === c.id && (s.status === 'enrolled' || s.status === 'suspended')).length;
+                const _today = new Date(); const _todayIso = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
+                const enrolled = students.filter(s => s.centre === centre && s.classId === c.id && (s.status === 'enrolled' || s.status === 'suspended') && (!s.lastDate || s.lastDate >= _todayIso)).length;
                 const isActive = view === 'class' && currentClassId === c.id;
                 const overCap = enrolled > c.capacity;
                 return (
@@ -1438,8 +1439,10 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
-  const enrolledCount = students.filter(s => s.status === 'enrolled' && inWeek(s)).length;
-  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && inWeek(s)).length;
+  const _d = new Date(); const todayIso = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
+  const isCurrentlyActive = (s) => !s.lastDate || s.lastDate >= todayIso;
+  const enrolledCount = students.filter(s => s.status === 'enrolled' && isCurrentlyActive(s)).length;
+  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isCurrentlyActive(s)).length;
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
