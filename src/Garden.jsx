@@ -2126,7 +2126,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.parents} onSave={v => onUpdate(student.id, { parents: v })} placeholder="— add parents" />
       </td>
       <td className="px-2 py-2 text-xs">
-        {(() => { const hs = fmtHSSummary(student.suspensions); return hs ? <div className="text-xs font-mono mb-0.5" style={{ color: '#60a5fa' }}>HS: {hs}</div> : null; })()}
+        {student.lastDate && <div className="text-xs font-semibold mb-0.5" style={{ color: '#dc2626' }}>LAST DAY {shortDate(student.lastDate)}</div>}
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
       </td>
       <td className="px-2 py-2 text-xs" style={{ minWidth: '160px' }}>
