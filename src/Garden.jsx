@@ -15,8 +15,8 @@ const INITIAL_CLASSES = [
   { id: 'el2h', name: 'EL 2 Hibiscus',   fullName: 'Early Learners 2 — Hibiscus', age: '2–3 yrs',   capacity: 18, dot: '#FDA4AF' },
   { id: 'pks',  name: 'PK Saffron',      fullName: 'Pre-Kindergarten Saffron',    age: '3–4 yrs',   capacity: 20, dot: '#FB923C' },
   { id: 'pkl',  name: 'PK Lavender',     fullName: 'Pre-Kindergarten Lavender',   age: '3–4 yrs',   capacity: 20, dot: '#C4B5FD' },
-  { id: 'jrk',  name: 'Jr Kindergarten', fullName: 'Junior Kindergarten',         age: '4–5 yrs',   capacity: 22, dot: '#6EE7B7' },
   { id: 'kg',   name: 'Kindergarten',    fullName: 'Kindergarten',                age: '5–6.5 yrs', capacity: 25, dot: '#7DD3FC' },
+  { id: 'jrk',  name: 'Jr Kindergarten', fullName: 'Junior Kindergarten',         age: '4–5 yrs',   capacity: 22, dot: '#6EE7B7' },
 ];
 
 const ClassesContext = React.createContext(null);
@@ -568,6 +568,14 @@ function migrateHolidaySuspensionNotes(students) {
     return { ...s, suspensions: [...dedupedExisting, ...uniqueNew], note: result.remainingNote };
   });
   return { students: updated, migrationLog };
+}
+
+// Shared active-student predicate used by sidebar, class header, and dashboard.
+// A student counts as active if their Last Day is unset OR is today or later.
+function isStudentActive(s) {
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return !s.lastDate || s.lastDate >= today;
 }
 
 function shortDate(d) {
@@ -1239,8 +1247,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 {classesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
               {classesOpen && classes.map(c => {
-                const _today = new Date(); const _todayIso = `${_today.getFullYear()}-${String(_today.getMonth()+1).padStart(2,'0')}-${String(_today.getDate()).padStart(2,'0')}`;
-                const enrolled = students.filter(s => s.centre === centre && s.classId === c.id && (s.status === 'enrolled' || s.status === 'suspended') && (!s.lastDate || s.lastDate >= _todayIso)).length;
+                const enrolled = students.filter(s => s.centre === centre && s.classId === c.id && (s.status === 'enrolled' || s.status === 'suspended') && isStudentActive(s)).length;
                 const isActive = view === 'class' && currentClassId === c.id;
                 const overCap = enrolled > c.capacity;
                 return (
@@ -1504,10 +1511,8 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
-  const _d = new Date(); const todayIso = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
-  const isCurrentlyActive = (s) => !s.lastDate || s.lastDate >= todayIso;
-  const enrolledCount = students.filter(s => s.status === 'enrolled' && isCurrentlyActive(s)).length;
-  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isCurrentlyActive(s)).length;
+  const enrolledCount = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
+  const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isStudentActive(s)).length;
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
@@ -3168,11 +3173,12 @@ function Stat({ label, value }) {
 
 function DashboardView({ students, onJump, onExportAll }) {
   const { classes } = useClasses();
-  const totalEnrolled = students.filter(s => s.status === 'enrolled').length;
+  // All counts use isStudentActive() — same logic as sidebar and class header
+  const totalEnrolled  = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
   const totalInquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent'].includes(s.status)).length;
-  const waitList = students.filter(s => s.status === 'wait_list').length;
-  const suspended = students.filter(s => ['suspended','extended_holiday'].includes(s.status)).length;
-  const followUps = students.filter(s => ['quote_sent','invoice_sent'].includes(s.status));
+  const waitList       = students.filter(s => s.status === 'wait_list').length;
+  const suspended      = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isStudentActive(s)).length;
+  const followUps      = students.filter(s => ['quote_sent','invoice_sent'].includes(s.status));
   const prepayExpiring = students.filter(s => s.prepay && (s.prepay.weeks - s.prepay.completed) <= 5);
 
   return (
@@ -3197,12 +3203,9 @@ function DashboardView({ students, onJump, onExportAll }) {
           {followUps.length === 0 ? (
             <div className="text-sm italic" style={{ color: 'var(--ink-faint)' }}>All caught up.</div>
           ) : followUps.map(f => (
-            <div key={f.id} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--line-soft)' }}>
-              <div>
-                <div className="font-medium text-sm">{f.name}</div>
-                <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>{f.note || `${STATUSES[f.status].label} — chase this person`}</div>
-              </div>
-              <button className="text-xs px-3 py-1 rounded-md border hover:bg-stone-50" style={{ borderColor: 'var(--line)' }}>Mark followed up</button>
+            <div key={f.id} className="py-2.5 border-b last:border-0" style={{ borderColor: 'var(--line-soft)' }}>
+              <div className="font-medium text-sm">{f.name}</div>
+              <div className="text-xs" style={{ color: 'var(--ink-faint)' }}>{STATUSES[f.status]?.label}{f.note ? ` · ${f.note}` : ''}</div>
             </div>
           ))}
         </div>
@@ -3211,12 +3214,9 @@ function DashboardView({ students, onJump, onExportAll }) {
           {prepayExpiring.length === 0 ? (
             <div className="text-sm italic" style={{ color: 'var(--ink-faint)' }}>No prepay blocks ending soon.</div>
           ) : prepayExpiring.map(p => (
-            <div key={p.id} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: 'var(--line-soft)' }}>
-              <div>
-                <div className="font-medium text-sm">{p.name}</div>
-                <div className="text-xs font-mono" style={{ color: 'var(--ink-faint)' }}>{p.prepay.completed}/{p.prepay.weeks} weeks · {p.prepay.weeks - p.prepay.completed} left</div>
-              </div>
-              <button className="text-xs px-3 py-1 rounded-md text-white" style={{ background: 'var(--accent)' }}>Prep invoice</button>
+            <div key={p.id} className="py-2.5 border-b last:border-0" style={{ borderColor: 'var(--line-soft)' }}>
+              <div className="font-medium text-sm">{p.name}</div>
+              <div className="text-xs font-mono" style={{ color: 'var(--ink-faint)' }}>{p.prepay.completed}/{p.prepay.weeks} weeks · {p.prepay.weeks - p.prepay.completed} left</div>
             </div>
           ))}
         </div>
@@ -3226,7 +3226,7 @@ function DashboardView({ students, onJump, onExportAll }) {
         <div className="rounded-lg border p-5" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
           <div className="font-display text-xl mb-3">Capacity by class</div>
           {classes.map(c => {
-            const n = students.filter(s => s.classId === c.id && ['enrolled','suspended'].includes(s.status)).length;
+            const n = students.filter(s => s.classId === c.id && ['enrolled','suspended'].includes(s.status) && isStudentActive(s)).length;
             const pct = (n / c.capacity) * 100;
             return (
               <button key={c.id} onClick={() => onJump(c.id)} className="block w-full text-left mb-3 last:mb-0 hover:opacity-80">
