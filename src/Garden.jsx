@@ -454,17 +454,27 @@ function parseHolidaySuspensionNote(note) {
 
   const ranges = [];
 
-  // ── Pattern A: "8 Feb - 1 Mar 2026"  (day+month – day+month [year])
-  // Also handles cross-year: if end month < start month, start year = end year - 1
-  const PA = new RegExp(`(\\d{1,2})\\s+(${MP})\\s*[-–—]\\s*(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?`, 'gi');
+  // ── Pattern A: cross-month ranges with optional year on EITHER end
+  // Handles: "8 Feb - 1 Mar 2026", "10 Dec 25 - 4 Jan 2026", "13 Mar – 3 Apr"
+  const PA = new RegExp(`(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?\\s*[-–—]\\s*(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?`, 'gi');
   let m;
   PA.lastIndex = 0;
   while ((m = PA.exec(note)) !== null) {
     if (isClaimed(m.index, m[0].length)) continue;
-    const [full, d1, mon1, d2, mon2, yrRaw] = m;
-    const y2 = parseYear(yrRaw);
+    const [full, d1, mon1, yr1Raw, d2, mon2, yr2Raw] = m;
+    const curYear = new Date().getFullYear();
     const m1n = MONTHS[mon1.toLowerCase()], m2n = MONTHS[mon2.toLowerCase()];
-    const y1 = (m1n && m2n && m1n > m2n) ? y2 - 1 : y2; // crossed year boundary
+    let y1, y2;
+    if (yr2Raw) {
+      y2 = parseYear(yr2Raw);
+      y1 = yr1Raw ? parseYear(yr1Raw) : (m1n && m2n && m1n > m2n ? y2 - 1 : y2);
+    } else if (yr1Raw) {
+      y1 = parseYear(yr1Raw);
+      y2 = (m1n && m2n && m2n < m1n) ? y1 + 1 : y1;
+    } else {
+      y1 = y2 = curYear;
+      if (m1n && m2n && m1n > m2n) y1 = y2 - 1;
+    }
     const start = toIso(d1, mon1, y1);
     const end   = toIso(d2, mon2, y2);
     if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
@@ -514,26 +524,48 @@ function parseHolidaySuspensionNote(note) {
 }
 
 // Run note migration on a student array. Returns { students, migrationLog }
+// Also deduplicates existing suspension chips on every student (not just those with HS in notes).
 function migrateHolidaySuspensionNotes(students) {
   const migrationLog = [];
   const updated = students.map(s => {
     const note = s.note || '';
-    // Only attempt if note contains HS/holiday suspension keywords
-    if (!/holiday\s*sus|(?:^|\s)hs\s/i.test(note)) return s;
+
+    // ── Step 1: always deduplicate existing suspension chips ──
+    const rawSusp = s.suspensions || [];
+    const dedupedExisting = rawSusp.filter((item, idx, arr) =>
+      idx === arr.findIndex(x => x.start === item.start && x.end === item.end)
+    );
+    const dupesRemoved = rawSusp.length - dedupedExisting.length;
+    if (dupesRemoved > 0) {
+      migrationLog.push({ name: s.name, status: 'deduped', removed: dupesRemoved });
+    }
+
+    // ── Step 2: parse note if it contains HS text OR a leftover date-range pattern ──
+    // Broadened trigger catches partial migrations (note cleaned of HS keywords but
+    // still has a leftover "10 Dec 25 - 4 Jan 2026" that wasn't parsed first time).
+    const hasHsKeyword = /holiday\s*sus|(?:^|\s)hs\s/i.test(note);
+    // Also catches leftover date-range text after partial migrations (e.g. "10 Dec 25 - 4 Jan 2026")
+    const hasDateRange = /\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*(?:\s+\d{2,4})?\s*[-–—]/i.test(note);
+    const shouldParse = hasHsKeyword || hasDateRange;
+
+    if (!shouldParse) {
+      return dupesRemoved > 0 ? { ...s, suspensions: dedupedExisting } : s;
+    }
 
     const result = parseHolidaySuspensionNote(note);
     if (!result) {
       migrationLog.push({ name: s.name, note, status: 'unparsed' });
-      return s;
+      return dupesRemoved > 0 ? { ...s, suspensions: dedupedExisting } : s;
     }
 
-    // Merge with existing suspensions (avoid duplicates)
-    const existing = s.suspensions || [];
-    const newRanges = result.ranges.filter(nr =>
-      !existing.some(e => e.start === nr.start && e.end === nr.end)
+    // Merge: deduplicate within new ranges AND against already-existing chips
+    const uniqueNew = result.ranges.filter((nr, idx, arr) =>
+      arr.findIndex(x => x.start === nr.start && x.end === nr.end) === idx && // dedup within new
+      !dedupedExisting.some(e => e.start === nr.start && e.end === nr.end)    // dedup vs existing
     );
-    migrationLog.push({ name: s.name, note, status: 'migrated', ranges: newRanges, remaining: result.remainingNote });
-    return { ...s, suspensions: [...existing, ...newRanges], note: result.remainingNote };
+
+    migrationLog.push({ name: s.name, note, status: 'migrated', ranges: uniqueNew, remaining: result.remainingNote, dupesRemoved });
+    return { ...s, suspensions: [...dedupedExisting, ...uniqueNew], note: result.remainingNote };
   });
   return { students: updated, migrationLog };
 }
@@ -879,17 +911,19 @@ function GardenApp({ initialCentre = 'canggu' }) {
 
       // Migrate any free-text HS notes into structured suspensions
       const { students: migratedStudents, migrationLog } = migrateHolidaySuspensionNotes(dbStudents);
-      const changed = migrationLog.filter(l => l.status === 'migrated');
+      const changed = migrationLog.filter(l => l.status === 'migrated' || l.status === 'deduped');
       if (changed.length > 0 && supabase) {
-        // Persist migrated students back to DB
+        // Persist migrated/deduped students back to DB
         await supabase.from('students').upsert(migratedStudents.map(s => ({ id: String(s.id), data: s })));
       }
       if (migrationLog.length > 0) {
-        const unparsed = migrationLog.filter(l => l.status === 'unparsed');
-        console.info('[HS Migration]', migrationLog);
-        if (unparsed.length > 0) {
-          console.warn('[HS Migration] Could not parse notes for:', unparsed.map(l => `${l.name}: "${l.note}"`));
-        }
+        const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
+        const migrated  = migrationLog.filter(l => l.status === 'migrated');
+        const deduped   = migrationLog.filter(l => l.status === 'deduped');
+        if (migrated.length)  console.info('[HS Migration] Late-migrated ranges:', migrated.map(l => `${l.name}: ${l.ranges.map(r=>r.start+'→'+r.end).join(', ')} (remaining note: "${l.remaining}")`));
+        if (deduped.length)   console.info('[HS Migration] Removed duplicate chips:', deduped.map(l => `${l.name}: removed ${l.removed} duplicate(s)`));
+        if (unparsed.length)  console.warn('[HS Migration] Could not parse:', unparsed.map(l => `${l.name}: "${l.note}"`));
+        if (!migrated.length && !deduped.length && !unparsed.length) console.info('[HS Migration] All clean — nothing to fix.');
       }
 
       setStudents(migratedStudents);
