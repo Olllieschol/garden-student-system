@@ -2845,41 +2845,62 @@ function parseSpreadsheetFile(file) {
           const { blockOffset, baseOffset } = findLatestBlock(rows);
           const COL = buildColMap(blockOffset, baseOffset);
           let sheetStudentCount = 0;
-          let currentSection = 'active';
-          let consecutiveEmpty = 0;
+          // phase: 'active' → parse enrolled students
+          //        'scanning' → TOTAL hit, skipping everything until RECENTLY LEFT header
+          //        'left' → parse left students until next TOTAL or 5 blank rows
+          //        'done' → stop
+          let phase = 'active';
+          let leftBlankCount = 0;
 
           for (let ri = 3; ri < rows.length; ri++) {
+            if (phase === 'done') break;
             const row = rows[ri];
             const childName = String(row[COL.name] || '').trim();
             const col0 = String(row[COL.no] || '').trim().toLowerCase();
             const col1Lower = childName.toLowerCase();
 
-            // Check all cells for section header (merged cells can land in any column)
+            // Check all cells for RECENTLY LEFT header (merged cells can land in any column)
             const allCells = row.map(c => String(c || '').trim().toLowerCase()).join(' ');
             if (allCells.includes('recently left')) {
-              currentSection = 'left';
-              consecutiveEmpty = 0;
+              phase = 'left';
+              leftBlankCount = 0;
               continue;
             }
 
-            // Skip divider/summary rows without breaking — RECENTLY LEFT may come after TOTAL
-            if (col1Lower.startsWith('total') || col1Lower.includes('holiday suspension') ||
-                col1Lower === 'full day' || col1Lower === 'half day' ||
-                col0 === 'total' || col0 === 'full day' || col0 === 'half day') continue;
-
-            if (!childName || /^\d+$/.test(childName)) {
-              consecutiveEmpty++;
-              if (consecutiveEmpty > 20) break; // stop after 20+ blank rows
+            if (phase === 'scanning') {
+              // Skip everything until we find RECENTLY LEFT (checked above)
               continue;
             }
-            consecutiveEmpty = 0;
-            if (col1Lower === 'child name' || col1Lower === 'no') continue;
+
+            if (phase === 'active') {
+              // End of active section — switch to scanning for RECENTLY LEFT
+              if (col1Lower.startsWith('total') || col1Lower.includes('holiday suspension') ||
+                  col1Lower === 'full day' || col1Lower === 'half day' ||
+                  col0 === 'total' || col0 === 'full day' || col0 === 'half day') {
+                phase = 'scanning';
+                continue;
+              }
+              if (!childName || /^\d+$/.test(childName)) continue;
+              if (col1Lower === 'child name' || col1Lower === 'no') continue;
+            }
+
+            if (phase === 'left') {
+              // End of RECENTLY LEFT section
+              if (col1Lower.startsWith('total') || col0 === 'total') { phase = 'done'; break; }
+              if (!childName || /^\d+$/.test(childName)) {
+                leftBlankCount++;
+                if (leftBlankCount > 5) { phase = 'done'; break; }
+                continue;
+              }
+              leftBlankCount = 0;
+              if (col1Lower === 'child name' || col1Lower === 'no') continue;
+            }
 
             const student = {
               name: childName,
               gender: guessGenderFromName(childName),
               classId: finalClassId,
-              status: currentSection === 'left' ? 'left' : 'enrolled',
+              status: phase === 'left' ? 'left' : 'enrolled',
               dob: excelDateToISO(row[COL.dob]),
               nationality: String(row[COL.nationality] || '').trim(),
               parents: String(row[COL.parents] || '').trim(),
