@@ -16,7 +16,7 @@ const INITIAL_CLASSES = [
   { id: 'pks',  name: 'PK Saffron',      fullName: 'Pre-Kindergarten Saffron',    age: '3–4 yrs',   capacity: 20, dot: '#FB923C' },
   { id: 'pkl',  name: 'PK Lavender',     fullName: 'Pre-Kindergarten Lavender',   age: '3–4 yrs',   capacity: 20, dot: '#C4B5FD' },
   { id: 'jrk',  name: 'Jr Kindergarten', fullName: 'Junior Kindergarten',         age: '4–5 yrs',   capacity: 22, dot: '#6EE7B7' },
-  { id: 'kg',   name: 'Kindergarten',    fullName: 'Kindergarten',                age: '5–6.5 yrs', capacity: 24, dot: '#7DD3FC' },
+  { id: 'kg',   name: 'Kindergarten',    fullName: 'Kindergarten',                age: '5–6.5 yrs', capacity: 25, dot: '#7DD3FC' },
 ];
 
 const ClassesContext = React.createContext(null);
@@ -2845,23 +2845,41 @@ function parseSpreadsheetFile(file) {
           const { blockOffset, baseOffset } = findLatestBlock(rows);
           const COL = buildColMap(blockOffset, baseOffset);
           let sheetStudentCount = 0;
+          let currentSection = 'active';
+          let consecutiveEmpty = 0;
 
           for (let ri = 3; ri < rows.length; ri++) {
             const row = rows[ri];
             const childName = String(row[COL.name] || '').trim();
             const col0 = String(row[COL.no] || '').trim().toLowerCase();
             const col1Lower = childName.toLowerCase();
+
+            // Check all cells for section header (merged cells can land in any column)
+            const allCells = row.map(c => String(c || '').trim().toLowerCase()).join(' ');
+            if (allCells.includes('recently left')) {
+              currentSection = 'left';
+              consecutiveEmpty = 0;
+              continue;
+            }
+
+            // Skip divider/summary rows without breaking — RECENTLY LEFT may come after TOTAL
             if (col1Lower.startsWith('total') || col1Lower.includes('holiday suspension') ||
                 col1Lower === 'full day' || col1Lower === 'half day' ||
-                col0 === 'total' || col0 === 'full day' || col0 === 'half day') break;
-            if (!childName || /^\d+$/.test(childName)) continue;
+                col0 === 'total' || col0 === 'full day' || col0 === 'half day') continue;
+
+            if (!childName || /^\d+$/.test(childName)) {
+              consecutiveEmpty++;
+              if (consecutiveEmpty > 20) break; // stop after 20+ blank rows
+              continue;
+            }
+            consecutiveEmpty = 0;
             if (col1Lower === 'child name' || col1Lower === 'no') continue;
 
             const student = {
               name: childName,
               gender: guessGenderFromName(childName),
               classId: finalClassId,
-              status: 'enrolled',
+              status: currentSection === 'left' ? 'left' : 'enrolled',
               dob: excelDateToISO(row[COL.dob]),
               nationality: String(row[COL.nationality] || '').trim(),
               parents: String(row[COL.parents] || '').trim(),
