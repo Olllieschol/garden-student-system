@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { supabase } from './supabase.js';
 import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2 } from 'lucide-react';
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');`;
@@ -671,14 +672,9 @@ function parseCSVRow(line) {
 // ============================================================
 
 function GardenApp() {
-  const [students, setStudents] = useState(() => {
-    try {
-      const saved = localStorage.getItem('garden_students');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return SEED_STUDENTS;
-  });
-  const [classes, setClasses] = useState(INITIAL_CLASSES);
+  const [students, setStudents] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [dbLoading, setDbLoading] = useState(true);
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [centre, setCentre] = useState('canggu');
@@ -703,32 +699,109 @@ function GardenApp() {
   };
 
   const todayIso = new Date().toISOString().slice(0, 10);
+  const showToast = m => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
-  // Persist students to localStorage on every change
-  useEffect(() => {
-    try { localStorage.setItem('garden_students', JSON.stringify(students)); } catch {}
-  }, [students]);
+  // Supabase helpers
+  const syncStudentToDb = (student) => {
+    if (!supabase) return;
+    supabase.from('students').upsert({ id: String(student.id), data: student })
+      .then(({ error }) => { if (error) console.error('Student sync error:', error); });
+  };
+  const syncClassToDb = (cls) => {
+    if (!supabase) return;
+    supabase.from('classes').upsert({ id: cls.id, data: cls })
+      .then(({ error }) => { if (error) console.error('Class sync error:', error); });
+  };
 
-  // Weekly backup reminder: show toast if last export was 7+ days ago
+  // Load data from Supabase on mount (with localStorage migration for first run)
   useEffect(() => {
-    const lastExport = localStorage.getItem('garden_last_export');
-    if (!lastExport) return;
-    const daysSince = Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000);
-    if (daysSince >= 7) {
-      showToast(`Reminder: last CSV backup was ${daysSince} days ago. Export a fresh one from the class view.`);
+    async function load() {
+      if (!supabase) {
+        // No Supabase config — fall back to localStorage
+        try {
+          const saved = localStorage.getItem('garden_students');
+          if (saved) setStudents(JSON.parse(saved));
+          else setStudents(SEED_STUDENTS);
+        } catch { setStudents(SEED_STUDENTS); }
+        setClasses(INITIAL_CLASSES);
+        setDbLoading(false);
+        return;
+      }
+
+      const [studentsRes, classesRes] = await Promise.all([
+        supabase.from('students').select('data'),
+        supabase.from('classes').select('data'),
+      ]);
+
+      let dbStudents = studentsRes.data?.map(r => r.data) || [];
+      let dbClasses  = classesRes.data?.map(r => r.data)  || [];
+
+      // One-time migration: if DB is empty, pull from localStorage
+      if (dbStudents.length === 0) {
+        try {
+          const lsRaw = localStorage.getItem('garden_students');
+          const lsStudents = lsRaw ? JSON.parse(lsRaw) : SEED_STUDENTS;
+          const rows = lsStudents.map(s => ({ id: String(s.id), data: s }));
+          await supabase.from('students').upsert(rows);
+          dbStudents = lsStudents;
+          if (lsRaw) {
+            showToast(`Migrated ${lsStudents.length} students to shared database`);
+            localStorage.removeItem('garden_students');
+          }
+        } catch { dbStudents = SEED_STUDENTS; }
+      }
+
+      if (dbClasses.length === 0) {
+        await supabase.from('classes').upsert(INITIAL_CLASSES.map(c => ({ id: c.id, data: c })));
+        dbClasses = INITIAL_CLASSES;
+      }
+
+      setStudents(dbStudents);
+      setClasses(dbClasses);
+      setDbLoading(false);
     }
+    load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Realtime: keep all browser tabs / devices in sync
+  useEffect(() => {
+    if (!supabase) return;
+    const channel = supabase.channel('garden-db')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, ({ eventType, new: n, old: o }) => {
+        if (eventType === 'DELETE') {
+          setStudents(prev => prev.filter(s => String(s.id) !== o.id));
+        } else {
+          setStudents(prev => {
+            const idx = prev.findIndex(s => String(s.id) === n.id);
+            return idx >= 0 ? prev.map((s, i) => i === idx ? n.data : s) : [...prev, n.data];
+          });
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, ({ eventType, new: n, old: o }) => {
+        if (eventType === 'DELETE') {
+          setClasses(prev => prev.filter(c => c.id !== o.id));
+        } else {
+          setClasses(prev => {
+            const idx = prev.findIndex(c => c.id === n.id);
+            return idx >= 0 ? prev.map((c, i) => i === idx ? n.data : c) : [...prev, n.data];
+          });
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, []);
 
   // Auto-complete transitions whose date has arrived
   useEffect(() => {
+    if (dbLoading) return;
     students.forEach(s => {
       if (s.transitionTo && s.transitionDate && s.transitionDate <= todayIso) {
         updateStudent(s.id, { classId: s.transitionTo, transitionTo: null, transitionDate: null });
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todayIso]);
+  }, [todayIso, dbLoading]);
 
   // Own-class students + incoming students (pending transitions into this class)
   const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived);
@@ -743,10 +816,19 @@ function GardenApp() {
   // Class CRUD
   const addClass = (cls) => {
     const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
-    setClasses(prev => [...prev, { ...cls, id, fullName: cls.fullName || cls.name }]);
+    const newCls = { ...cls, id, fullName: cls.fullName || cls.name };
+    setClasses(prev => [...prev, newCls]);
+    syncClassToDb(newCls);
     showToast(`Added class "${cls.name}"`);
   };
-  const updateClass = (id, patch) => setClasses(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+  const updateClass = (id, patch) => {
+    setClasses(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, ...patch } : c);
+      const merged = next.find(c => c.id === id);
+      if (merged) syncClassToDb(merged);
+      return next;
+    });
+  };
   const deleteClass = (id) => {
     const c = classes.find(x => x.id === id);
     const studentsInClass = students.filter(s => s.classId === id && !s.archived);
@@ -757,12 +839,13 @@ function GardenApp() {
     setClasses(prev => prev.filter(x => x.id !== id));
     if (currentClassId === id) setCurrentClassId(classes[0]?.id);
     showToast(`Removed class "${c?.name}"`);
+    if (supabase) supabase.from('classes').delete().eq('id', id);
   };
 
   // Add student manually
   const addStudent = (data) => {
     const newId = (students.length === 0 ? 0 : Math.max(...students.map(s => s.id))) + 1;
-    setStudents(prev => [...prev, {
+    const newStudent = {
       id: newId, name: data.name || 'Unnamed', gender: data.gender || 'X',
       centre, classId: data.classId || currentClassId, status: data.status || 'enrolled',
       dob: data.dob || '', nationality: data.nationality || '', parents: data.parents || '',
@@ -773,12 +856,20 @@ function GardenApp() {
       lengthOfStay: data.lengthOfStay || 'Long term',
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
       invoiceStatus: 'not_sent', invoiceNote: '', prepay: null, siblings: [],
-    }]);
+    };
+    setStudents(prev => [...prev, newStudent]);
+    syncStudentToDb(newStudent);
     showToast(`Added ${data.name}`);
   };
 
-  const showToast = m => { setToast(m); setTimeout(() => setToast(null), 3000); };
-  const updateStudent = (id, patch) => setStudents(p => p.map(s => s.id === id ? { ...s, ...patch } : s));
+  const updateStudent = (id, patch) => {
+    setStudents(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, ...patch } : s);
+      const merged = next.find(s => s.id === id);
+      if (merged) syncStudentToDb(merged);
+      return next;
+    });
+  };
 
   const handleExportAll = () => {
     const exportDate = exportStudentsToCSV(students);
@@ -787,18 +878,19 @@ function GardenApp() {
   };
   const archiveStudent = (id) => {
     const s = students.find(x => x.id === id);
-    setStudents(p => p.map(x => x.id === id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
+    updateStudent(id, { archived: true, archivedAt: new Date().toISOString() });
     setSelectedStudentId(null);
     showToast(`${s?.name} moved to archive — restore anytime from Archive`);
   };
   const restoreStudent = (id) => {
     const s = students.find(x => x.id === id);
-    setStudents(p => p.map(x => x.id === id ? { ...x, archived: false, archivedAt: null } : x));
+    updateStudent(id, { archived: false, archivedAt: null });
     showToast(`${s?.name} restored`);
   };
   const permanentDelete = (id) => {
     const s = students.find(x => x.id === id);
     setStudents(p => p.filter(x => x.id !== id));
+    if (supabase) supabase.from('students').delete().eq('id', String(id));
     setSelectedStudentId(null);
     showToast(`${s?.name} permanently deleted`);
   };
@@ -831,7 +923,7 @@ function GardenApp() {
       else if (g.startsWith('m') || g.includes('boy')) gender = 'M';
     }
 
-    setStudents(prev => [...prev, {
+    const newStudent = {
       id: newId,
       name: p.childName || p.childNameRaw || 'Unnamed child',
       gender,
@@ -894,10 +986,21 @@ function GardenApp() {
       lengthOfStay: p.intendedStay || '',
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
       invoiceStatus: 'not_sent', invoiceNote: '', prepay: null,
-    }]);
+    };
+    setStudents(prev => [...prev, newStudent]);
+    syncStudentToDb(newStudent);
     setEmailModalOpen(false);
     showToast(`Added ${p.childName || 'new inquiry'} to the pipeline`);
   };
+
+  if (dbLoading) return (
+    <div style={{ background: '#FAF6EF', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Geist, sans-serif' }}>
+      <div style={{ textAlign: 'center', color: '#8B8678' }}>
+        <div style={{ fontFamily: 'Instrument Serif, Georgia, serif', fontSize: '2rem', marginBottom: '0.5rem', color: '#1B1A17' }}>The Garden</div>
+        <div style={{ fontSize: '0.875rem' }}>Loading…</div>
+      </div>
+    </div>
+  );
 
   return (
     <ClassesContext.Provider value={{ classes, setClasses, addClass, updateClass, deleteClass }}>
@@ -1104,6 +1207,12 @@ function GardenApp() {
             }));
           }
           setStudents(newStudents);
+          if (supabase) {
+            // Replace all students in DB with the imported set
+            supabase.from('students').delete().neq('id', '__none__').then(() => {
+              supabase.from('students').upsert(newStudents.map(s => ({ id: String(s.id), data: s })));
+            });
+          }
           setImportModalOpen(false);
           showToast(`${isBackup ? 'Restored' : 'Imported'} ${newStudents.length} students`);
         }} />}
