@@ -919,7 +919,8 @@ function GardenApp({ initialCentre = 'canggu' }) {
   }, [todayIso, dbLoading]);
 
   // Own-class students + incoming students (pending transitions into this class)
-  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived);
+  // Exclude left/cancelled and students whose Last Day has already passed — those belong in All Students → Left only
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (!s.lastDate || s.lastDate >= todayIso));
   const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
   const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
 
@@ -1927,6 +1928,18 @@ function SuspensionSection({ student, onUpdate }) {
   );
 }
 
+const HS_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtHSSummary(suspensions) {
+  if (!suspensions || suspensions.length === 0) return null;
+  const parts = suspensions.map(({ start, end }) => {
+    if (!start || !end) return null;
+    const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
+    if (s.getMonth() === e.getMonth()) return `${s.getDate()}–${e.getDate()} ${HS_MONTHS[s.getMonth()]}`;
+    return `${s.getDate()} ${HS_MONTHS[s.getMonth()]}–${e.getDate()} ${HS_MONTHS[e.getMonth()]}`;
+  }).filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
 function SuspensionCell({ student, onUpdate }) {
   const [open, setOpen] = useState(false);
   const [start, setStart] = useState('');
@@ -2113,6 +2126,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.parents} onSave={v => onUpdate(student.id, { parents: v })} placeholder="— add parents" />
       </td>
       <td className="px-2 py-2 text-xs">
+        {(() => { const hs = fmtHSSummary(student.suspensions); return hs ? <div className="text-xs font-mono mb-0.5" style={{ color: '#60a5fa' }}>HS: {hs}</div> : null; })()}
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
       </td>
       <td className="px-2 py-2 text-xs" style={{ minWidth: '160px' }}>
