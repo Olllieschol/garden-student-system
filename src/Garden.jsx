@@ -418,6 +418,96 @@ function isoAddDays(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Parse free-text holiday suspension notes into structured date ranges.
+// Returns { ranges: [{start,end}], remainingNote: string, unparsed: bool }
+function parseHolidaySuspensionNote(note) {
+  if (!note) return null;
+  const MONTHS = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+    january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12 };
+
+  const toIso = (day, month, year) => {
+    const m = String(MONTHS[month.toLowerCase()]).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    const y = year || new Date().getFullYear();
+    return `${y}-${m}-${d}`;
+  };
+
+  // Patterns:
+  // "2 - 12 March 2026", "2 Mar – 12 Mar", "4–22 May 2026", "6 - 22 June"
+  const REX = /(\d{1,2})\s*[-–—]\s*(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{4})?/gi;
+  // Same-month range: "13 Mar – 3 Apr 2026" with different month for end
+  const REX2 = /(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*[-–—]\s*(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{4})?/gi;
+
+  const ranges = [];
+  let workingNote = note;
+
+  // Strip common prefixes so we can remove them after parsing
+  const prefixRex = /\b(Holiday\s*Suspension\s*:?\s*|HS\s*(?:From\s*|[0-9]\.\s*)?)/gi;
+
+  // Match cross-month ranges first (more specific)
+  let m;
+  REX2.lastIndex = 0;
+  while ((m = REX2.exec(note)) !== null) {
+    const [full, d1, mon1, d2, mon2, yr] = m;
+    const year = yr ? parseInt(yr) : new Date().getFullYear();
+    try {
+      ranges.push({ start: toIso(d1, mon1, year), end: toIso(d2, mon2, year), _match: full });
+    } catch {}
+  }
+
+  // Match same-month ranges
+  REX.lastIndex = 0;
+  while ((m = REX.exec(note)) !== null) {
+    const [full, d1, d2, mon, yr] = m;
+    // Skip if already matched by REX2
+    const alreadyCovered = ranges.some(r => r._match && note.indexOf(r._match) <= note.indexOf(full) && note.indexOf(r._match) + r._match.length >= note.indexOf(full) + full.length);
+    if (alreadyCovered) continue;
+    const year = yr ? parseInt(yr) : new Date().getFullYear();
+    try {
+      ranges.push({ start: toIso(d1, mon, year), end: toIso(d2, mon, year), _match: full });
+    } catch {}
+  }
+
+  if (ranges.length === 0) return null;
+
+  // Remove parsed sections and the HS prefix from the note
+  let cleaned = note;
+  for (const r of ranges) {
+    if (r._match) cleaned = cleaned.replace(r._match, '');
+  }
+  cleaned = cleaned.replace(prefixRex, '').replace(/\s*[,;]\s*/g, ' ').replace(/\s*\d+\.\s*/g, ' ').trim();
+
+  return {
+    ranges: ranges.map(({ start, end }) => ({ start, end })),
+    remainingNote: cleaned,
+  };
+}
+
+// Run note migration on a student array. Returns { students, migrationLog }
+function migrateHolidaySuspensionNotes(students) {
+  const migrationLog = [];
+  const updated = students.map(s => {
+    const note = s.note || '';
+    // Only attempt if note contains HS/holiday suspension keywords
+    if (!/holiday\s*sus|(?:^|\s)hs\s/i.test(note)) return s;
+
+    const result = parseHolidaySuspensionNote(note);
+    if (!result) {
+      migrationLog.push({ name: s.name, note, status: 'unparsed' });
+      return s;
+    }
+
+    // Merge with existing suspensions (avoid duplicates)
+    const existing = s.suspensions || [];
+    const newRanges = result.ranges.filter(nr =>
+      !existing.some(e => e.start === nr.start && e.end === nr.end)
+    );
+    migrationLog.push({ name: s.name, note, status: 'migrated', ranges: newRanges, remaining: result.remainingNote });
+    return { ...s, suspensions: [...existing, ...newRanges], note: result.remainingNote };
+  });
+  return { students: updated, migrationLog };
+}
+
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   const dt = new Date(d);
@@ -720,8 +810,9 @@ function GardenApp({ initialCentre = 'canggu' }) {
         // No Supabase config — fall back to localStorage
         try {
           const saved = localStorage.getItem('garden_students');
-          if (saved) setStudents(JSON.parse(saved));
-          else setStudents(SEED_STUDENTS);
+          const raw = saved ? JSON.parse(saved) : SEED_STUDENTS;
+          const { students: migrated } = migrateHolidaySuspensionNotes(raw);
+          setStudents(migrated);
         } catch { setStudents(SEED_STUDENTS); }
         setClasses(INITIAL_CLASSES);
         setDbLoading(false);
@@ -756,7 +847,22 @@ function GardenApp({ initialCentre = 'canggu' }) {
         dbClasses = INITIAL_CLASSES;
       }
 
-      setStudents(dbStudents);
+      // Migrate any free-text HS notes into structured suspensions
+      const { students: migratedStudents, migrationLog } = migrateHolidaySuspensionNotes(dbStudents);
+      const changed = migrationLog.filter(l => l.status === 'migrated');
+      if (changed.length > 0 && supabase) {
+        // Persist migrated students back to DB
+        await supabase.from('students').upsert(migratedStudents.map(s => ({ id: String(s.id), data: s })));
+      }
+      if (migrationLog.length > 0) {
+        const unparsed = migrationLog.filter(l => l.status === 'unparsed');
+        console.info('[HS Migration]', migrationLog);
+        if (unparsed.length > 0) {
+          console.warn('[HS Migration] Could not parse notes for:', unparsed.map(l => `${l.name}: "${l.note}"`));
+        }
+      }
+
+      setStudents(migratedStudents);
       setClasses(dbClasses);
       setDbLoading(false);
     }
@@ -1320,10 +1426,16 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
-  // Daily totals — count F and H per day from active students
-  const totals = ['mon','tue','wed','thu','fri'].map(day => {
-    const f = active.filter(s => s[day] === 'F').length;
-    const h = active.filter(s => s[day] === 'H').length;
+  // Daily totals — count F and H per day, excluding students on suspension that day
+  const weekMon = WEEKS[weekIdx]?.monDate;
+  const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
+    const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
+    const activeNotSuspended = active.filter(s => {
+      if (!dayIso) return true;
+      return !s.suspensions?.some(sus => sus.start <= dayIso && sus.end >= dayIso);
+    });
+    const f = activeNotSuspended.filter(s => s[day] === 'F').length;
+    const h = activeNotSuspended.filter(s => s[day] === 'H').length;
     return { day, f, h, total: f + h };
   });
 
@@ -1547,6 +1659,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <th className="text-left font-medium px-3 py-2.5">Invoice</th>
                 <th className="text-left font-medium px-3 py-2.5">Parents</th>
                 <th className="text-left font-medium px-3 py-2.5">Note</th>
+                <th className="text-left font-medium px-3 py-2.5">Holiday suspension</th>
                 <th className="text-left font-medium px-3 py-2.5">Transition</th>
                 <th className="text-center font-medium px-2 py-2.5">HS/yr</th>
               </tr>
@@ -1572,7 +1685,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                   </td>
                 ))}
                 <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch).length}</td>
-                <td colSpan={8}></td>
+                <td colSpan={9}></td>
               </tr>
 
               {/* TRANSITIONING IN — students whose join date hasn't arrived yet for this week */}
@@ -1795,11 +1908,73 @@ function SuspensionSection({ student, onUpdate }) {
   );
 }
 
+function SuspensionCell({ student, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [editIdx, setEditIdx] = useState(null);
+  const susp = student.suspensions || [];
+
+  const openAdd = (e) => { e.stopPropagation(); setEditIdx(null); setStart(''); setEnd(''); setOpen(true); };
+  const openEdit = (i, e) => { e.stopPropagation(); setEditIdx(i); setStart(susp[i].start); setEnd(susp[i].end); setOpen(true); };
+  const cancel = (e) => { e?.stopPropagation(); setOpen(false); setEditIdx(null); setStart(''); setEnd(''); };
+  const save = (e) => {
+    e.stopPropagation();
+    if (!start || !end || end < start) return;
+    const updated = editIdx !== null
+      ? susp.map((s, i) => i === editIdx ? { start, end } : s)
+      : [...susp, { start, end }];
+    onUpdate(student.id, { suspensions: updated });
+    cancel();
+  };
+  const del = (i, e) => { e.stopPropagation(); onUpdate(student.id, { suspensions: susp.filter((_, idx) => idx !== i) }); };
+
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmt = (iso) => { if (!iso) return ''; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${M[d.getMonth()]}`; };
+
+  if (open) return (
+    <div className="flex flex-col gap-1.5 py-1 min-w-[200px]" onClick={e => e.stopPropagation()}>
+      <div className="flex gap-1.5">
+        <input type="date" autoFocus value={start} onChange={e => setStart(e.target.value)} placeholder="Start" className="flex-1 text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--accent)' }} />
+        <input type="date" value={end} onChange={e => setEnd(e.target.value)} placeholder="End" className="flex-1 text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--line)' }} />
+      </div>
+      <div className="flex gap-1">
+        <button onClick={save} disabled={!start || !end || end < start} className="flex-1 py-0.5 rounded text-xs text-white disabled:opacity-40" style={{ background: 'var(--accent)' }}>
+          {editIdx !== null ? 'Save' : 'Add'}
+        </button>
+        <button onClick={cancel} className="px-2 py-0.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>✕</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5" onClick={e => e.stopPropagation()}>
+      {susp.length === 0
+        ? <button onClick={openAdd} className="text-xs italic hover:underline" style={{ color: 'var(--ink-faint)' }}>— add</button>
+        : susp.map((s, i) => (
+          <span key={i} className="inline-flex items-center gap-1 text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded group">
+            {fmt(s.start)}–{fmt(s.end)}
+            <button onClick={(e) => openEdit(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-blue-900 transition" title="Edit"><Edit3 size={8} /></button>
+            <button onClick={(e) => del(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition" title="Remove"><X size={8} /></button>
+          </span>
+        ))
+      }
+      {susp.length > 0 && <button onClick={openAdd} className="text-blue-400 hover:text-blue-600 transition" title="Add another"><Plus size={10} /></button>}
+    </div>
+  );
+}
+
 function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStudent, dimmed }) {
   const { classes } = useClasses();
   const status = STATUSES[student.status];
   const inv = INVOICE_STATUSES[student.invoiceStatus] || INVOICE_STATUSES.not_sent;
-  const susCount = student.suspensions?.length || 0;
+  // Count suspension weeks used (each range = ceil((end-start+1)/7) weeks, min 1)
+  const susWeeks = (student.suspensions || []).reduce((acc, s) => {
+    if (!s.start || !s.end) return acc;
+    const days = Math.round((new Date(s.end) - new Date(s.start)) / 86400000) + 1;
+    return acc + Math.max(1, Math.ceil(days / 7));
+  }, 0);
+  const susCount = susWeeks;
 
   const [statusOpen, setStatusOpen] = useState(false);
   const cycleInvoice = () => {
@@ -1920,6 +2095,9 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       </td>
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
+      </td>
+      <td className="px-2 py-2 text-xs" style={{ minWidth: '160px' }}>
+        <SuspensionCell student={student} onUpdate={onUpdate} />
       </td>
       <td className="px-2 py-2 text-xs">
         <TransitionCell student={student} onUpdate={onUpdate} />
