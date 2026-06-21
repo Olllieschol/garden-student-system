@@ -764,11 +764,15 @@ function GardenApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Flag to suppress realtime events during bulk import/reset operations
+  const suppressRealtime = useRef(false);
+
   // Realtime: keep all browser tabs / devices in sync
   useEffect(() => {
     if (!supabase) return;
     const channel = supabase.channel('garden-db')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, ({ eventType, new: n, old: o }) => {
+        if (suppressRealtime.current) return;
         if (eventType === 'DELETE') {
           setStudents(prev => prev.filter(s => String(s.id) !== o.id));
         } else {
@@ -779,6 +783,7 @@ function GardenApp() {
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, ({ eventType, new: n, old: o }) => {
+        if (suppressRealtime.current) return;
         if (eventType === 'DELETE') {
           setClasses(prev => prev.filter(c => c.id !== o.id));
         } else {
@@ -1153,7 +1158,24 @@ function GardenApp() {
             {view === 'all_students' && <AllStudentsView students={students.filter(s => s.centre === centre && !s.archived)} onSelectStudent={setSelectedStudentId} />}
             {view === 'archive' && <ArchiveView students={students.filter(s => s.centre === centre && s.archived)} onSelectStudent={setSelectedStudentId} onRestore={restoreStudent} onPermanentDelete={permanentDelete} />}
             {view === 'forecast' && <ForecastView students={students.filter(s => s.centre === centre && !s.archived)} />}
-            {view === 'settings' && <SettingsView />}
+            {view === 'settings' && <SettingsView onResetData={async () => {
+              suppressRealtime.current = true;
+              try {
+                if (supabase) {
+                  await supabase.from('students').delete().neq('id', '__none__');
+                  await supabase.from('classes').delete().neq('id', '__none__');
+                }
+              } finally {
+                setTimeout(() => { suppressRealtime.current = false; }, 2000);
+              }
+              setStudents(SEED_STUDENTS);
+              setClasses(INITIAL_CLASSES);
+              if (supabase) {
+                await supabase.from('students').upsert(SEED_STUDENTS.map(s => ({ id: String(s.id), data: s })));
+                await supabase.from('classes').upsert(INITIAL_CLASSES.map(c => ({ id: c.id, data: c })));
+              }
+              showToast('All data cleared — showing demo data');
+            }} />}
           </main>
 
           {selectedStudentId && (
@@ -1168,13 +1190,11 @@ function GardenApp() {
         </div>
 
         {emailModalOpen && <EmailParseModal onClose={() => setEmailModalOpen(false)} onConfirm={handleParsedConfirm} />}
-        {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} onConfirm={(parsed, isBackup) => {
+        {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} onConfirm={async (parsed, isBackup) => {
           let newStudents;
           if (isBackup) {
-            // Full restore from Garden CSV backup — preserve every field exactly
             newStudents = parsed;
           } else {
-            // Legacy Excel import — map to standard shape
             newStudents = parsed.map((s, i) => ({
               id: i + 1,
               name: s.name || 'Unnamed',
@@ -1206,13 +1226,20 @@ function GardenApp() {
               siblings: [],
             }));
           }
-          setStudents(newStudents);
           if (supabase) {
-            // Replace all students in DB with the imported set
-            supabase.from('students').delete().neq('id', '__none__').then(() => {
-              supabase.from('students').upsert(newStudents.map(s => ({ id: String(s.id), data: s })));
-            });
+            suppressRealtime.current = true;
+            try {
+              await supabase.from('students').delete().neq('id', '__none__');
+              const rows = newStudents.map(s => ({ id: String(s.id), data: s }));
+              for (let i = 0; i < rows.length; i += 100) {
+                await supabase.from('students').upsert(rows.slice(i, i + 100));
+              }
+            } finally {
+              // Resume realtime after a short delay (let the change events flush)
+              setTimeout(() => { suppressRealtime.current = false; }, 2000);
+            }
           }
+          setStudents(newStudents);
           setImportModalOpen(false);
           showToast(`${isBackup ? 'Restored' : 'Imported'} ${newStudents.length} students`);
         }} />}
@@ -3499,7 +3526,28 @@ function ForecastView({ students }) {
 // SETTINGS
 // ============================================================
 
-function SettingsView() {
+function SettingsView({ onResetData }) {
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetError, setResetError] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  const RESET_PASSWORD = 'thegardenstudents2024';
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    if (resetPassword !== RESET_PASSWORD) {
+      setResetError(true);
+      setResetPassword('');
+      return;
+    }
+    setResetting(true);
+    await onResetData();
+    setResetOpen(false);
+    setResetPassword('');
+    setResetting(false);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto px-8 pt-7 pb-16">
       <div className="font-display text-4xl mb-7">Settings</div>
@@ -3512,7 +3560,52 @@ function SettingsView() {
         <SettingsCard title="Audit log" desc="See who changed what, when. Restore deleted records within 30 days." />
         <SettingsCard title="Status workflow" desc="Add or rename pipeline stages. Default: inquiry → quote → invoice → enrolled / wait list / left." />
         <SettingsCard title="Notifications" desc="Configure automatic alerts (suspension cap, prepay expiring, invoice overdue, etc.)" />
+
+        {/* Reset Data */}
+        <div className="rounded-lg border p-5 mt-8" style={{ borderColor: '#FCA5A5', background: '#FFF5F5' }}>
+          <div className="font-medium mb-1 text-red-800">Reset Data</div>
+          <div className="text-xs mb-4" style={{ color: '#B91C1C' }}>
+            Permanently delete all student and class data from the database and restore demo data. This cannot be undone.
+          </div>
+          <button
+            onClick={() => { setResetOpen(true); setResetError(false); setResetPassword(''); }}
+            className="text-sm px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700 transition">
+            Remove all data
+          </button>
+        </div>
       </div>
+
+      {resetOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(27,26,23,0.6)' }}>
+          <form onSubmit={handleReset} className="rounded-xl shadow-2xl w-full max-w-sm p-8" style={{ background: 'var(--paper)' }}>
+            <div className="text-center mb-5">
+              <div className="font-display text-2xl mb-1 text-red-700">Remove all data?</div>
+              <div className="text-sm" style={{ color: 'var(--ink-faint)' }}>
+                This will permanently delete <strong>every student and class record</strong> from the database across all devices. The demo data will be restored. <strong>This cannot be undone.</strong>
+              </div>
+            </div>
+            <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--ink-faint)' }}>Enter admin password to confirm</label>
+            <input
+              autoFocus
+              type="password"
+              value={resetPassword}
+              onChange={e => { setResetPassword(e.target.value); setResetError(false); }}
+              placeholder="Admin password"
+              className="w-full px-4 py-3 rounded-lg border text-sm focus:outline-none focus:ring-2 mb-1"
+              style={{ borderColor: resetError ? '#dc2626' : 'var(--line)', background: 'var(--bg)', '--tw-ring-color': '#dc2626' }}
+            />
+            {resetError && <p className="text-xs mb-3 text-red-600">Incorrect password. Data was not deleted.</p>}
+            <div className="flex gap-2 mt-4">
+              <button type="button" onClick={() => setResetOpen(false)} className="flex-1 py-2.5 rounded-lg border text-sm hover:bg-stone-50 transition" style={{ borderColor: 'var(--line)' }}>
+                Cancel
+              </button>
+              <button type="submit" disabled={resetting} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50">
+                {resetting ? 'Deleting…' : 'Delete everything'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
