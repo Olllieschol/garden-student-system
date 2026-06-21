@@ -671,14 +671,14 @@ function parseCSVRow(line) {
 // APP
 // ============================================================
 
-function GardenApp() {
+function GardenApp({ initialCentre = 'canggu' }) {
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [dbLoading, setDbLoading] = useState(true);
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
-  const [centre, setCentre] = useState('canggu');
-  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: true, sanur: false });
+  const [centre, setCentre] = useState(initialCentre);
+  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: true, sanur: true }); // both unlocked since gate is on login screen
   const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
   const [weekIdx, setWeekIdx] = useState(TODAY_WEEK_IDX);
@@ -3860,49 +3860,89 @@ function CentrePasswordGate({ centre, correctPassword, onSuccess, onClose }) {
   );
 }
 
-const GATE_PASSWORD = 'thegardenstudents2024';
-const GATE_KEY = 'garden_auth';
+const CENTRE_PASSWORDS = { canggu: 'canggu2024', sanur: 'sanur2024' };
+const GATE_KEY = 'garden_auth_centre'; // stores 'canggu' or 'sanur'
 
 function PasswordGate() {
-  const [authed, setAuthed] = useState(() => {
-    try { return localStorage.getItem(GATE_KEY) === 'ok'; } catch { return false; }
+  // Session state: null = not logged in, 'canggu'/'sanur' = logged in to that centre
+  const [authedCentre, setAuthedCentre] = useState(() => {
+    try {
+      const saved = localStorage.getItem(GATE_KEY);
+      return (saved === 'canggu' || saved === 'sanur') ? saved : null;
+    } catch { return null; }
   });
+
+  // Login flow state
+  const [selectedCentre, setSelectedCentre] = useState(null); // which centre the user picked
   const [value, setValue] = useState('');
   const [error, setError] = useState(false);
 
-  if (authed) return <GardenApp />;
+  if (authedCentre) return <GardenApp initialCentre={authedCentre} />;
 
   const submit = (e) => {
     e.preventDefault();
-    if (value === GATE_PASSWORD) {
-      try { localStorage.setItem(GATE_KEY, 'ok'); } catch {}
-      setAuthed(true);
+    if (value === CENTRE_PASSWORDS[selectedCentre]) {
+      try { localStorage.setItem(GATE_KEY, selectedCentre); } catch {}
+      setAuthedCentre(selectedCentre);
     } else {
       setError(true);
       setValue('');
     }
   };
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1917', fontFamily: 'Geist, system-ui, sans-serif', padding: 24 }}>
+  const cardStyle = { width: '100%', maxWidth: 360, background: '#fafaf9', borderRadius: 16, padding: 32, boxShadow: '0 20px 50px rgba(0,0,0,0.4)' };
+  const wrapStyle = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1c1917', fontFamily: 'Geist, system-ui, sans-serif', padding: 24 };
+
+  const logo = (
+    <div style={{ textAlign: 'center', marginBottom: 24 }}>
+      <img src="/favicon.png" alt="The Garden" style={{ width: 56, height: 56, margin: '0 auto 12px', display: 'block', borderRadius: 12 }} onError={(e) => { e.target.style.display = 'none'; }} />
+      <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, margin: 0, color: '#1c1917' }}>The Garden</h1>
+    </div>
+  );
+
+  // Step 1: choose centre
+  if (!selectedCentre) return (
+    <div style={wrapStyle}>
       <style>{FONT_IMPORT}</style>
-      <form onSubmit={submit} style={{ width: '100%', maxWidth: 360, background: '#fafaf9', borderRadius: 16, padding: 32, boxShadow: '0 20px 50px rgba(0,0,0,0.4)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <img src="/favicon.png" alt="The Garden" style={{ width: 56, height: 56, margin: '0 auto 12px', display: 'block', borderRadius: 12 }} onError={(e) => { e.target.style.display = 'none'; }} />
-          <h1 style={{ fontFamily: 'Instrument Serif, serif', fontSize: 26, margin: 0, color: '#1c1917' }}>The Garden</h1>
-          <p style={{ fontSize: 13, color: '#78716c', marginTop: 4 }}>Enter password to continue</p>
+      <div style={cardStyle}>
+        {logo}
+        <p style={{ fontSize: 13, color: '#78716c', textAlign: 'center', marginTop: -12, marginBottom: 20 }}>Select your centre to continue</p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {['canggu', 'sanur'].map(c => (
+            <button key={c} onClick={() => setSelectedCentre(c)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: '1.5px solid #d6d3d1', background: '#fff', fontSize: 15, fontWeight: 500, cursor: 'pointer', color: '#1c1917', textTransform: 'capitalize', transition: 'border-color 0.15s, background 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#3C5A3C'; e.currentTarget.style.background = '#f4f7f4'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d6d3d1'; e.currentTarget.style.background = '#fff'; }}>
+              {c.charAt(0).toUpperCase() + c.slice(1)}
+            </button>
+          ))}
         </div>
+      </div>
+    </div>
+  );
+
+  // Step 2: enter password for chosen centre
+  const label = selectedCentre.charAt(0).toUpperCase() + selectedCentre.slice(1);
+  return (
+    <div style={wrapStyle}>
+      <style>{FONT_IMPORT}</style>
+      <form onSubmit={submit} style={cardStyle}>
+        {logo}
+        <p style={{ fontSize: 13, color: '#78716c', textAlign: 'center', marginTop: -12, marginBottom: 20 }}>Enter password for <strong>{label}</strong></p>
         <input
           type="password"
           autoFocus
           value={value}
           onChange={(e) => { setValue(e.target.value); setError(false); }}
-          placeholder="Password"
+          placeholder={`${label} password`}
           style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 10, border: `1px solid ${error ? '#dc2626' : '#d6d3d1'}`, fontSize: 15, outline: 'none', background: '#fff' }}
         />
         {error && <p style={{ color: '#dc2626', fontSize: 12, margin: '8px 2px 0' }}>Incorrect password. Try again.</p>}
-        <button type="submit" style={{ width: '100%', marginTop: 16, padding: '12px', borderRadius: 10, border: 'none', background: '#1c1917', color: '#fff', fontSize: 15, fontWeight: 500, cursor: 'pointer' }}>
+        <button type="submit" style={{ width: '100%', marginTop: 14, padding: '12px', borderRadius: 10, border: 'none', background: '#1c1917', color: '#fff', fontSize: 15, fontWeight: 500, cursor: 'pointer' }}>
           Enter
+        </button>
+        <button type="button" onClick={() => { setSelectedCentre(null); setValue(''); setError(false); }}
+          style={{ width: '100%', marginTop: 8, padding: '10px', borderRadius: 10, border: '1px solid #d6d3d1', background: 'transparent', color: '#78716c', fontSize: 13, cursor: 'pointer' }}>
+          ← Back
         </button>
       </form>
     </div>
