@@ -19,6 +19,18 @@ const INITIAL_CLASSES = [
   { id: 'kg',   name: 'Kindergarten',    fullName: 'Kindergarten',                age: '5–6.5 yrs', capacity: 25, dot: '#7DD3FC' },
 ];
 
+// Canonical class display order. Supabase has no ordering column, so we keep the
+// local `classes` state sorted by this index at every entry point (load, realtime,
+// addClass) — this is what every consumer (sidebar, dropdowns, dashboard, filters)
+// reads, so the order is consistent and survives a page refresh.
+const CLASS_ORDER = INITIAL_CLASSES.map(c => c.id);
+function sortClasses(list) {
+  return [...list].sort((a, b) => {
+    const ai = CLASS_ORDER.indexOf(a.id); const bi = CLASS_ORDER.indexOf(b.id);
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+  });
+}
+
 const ClassesContext = React.createContext(null);
 function useClasses() { return React.useContext(ClassesContext); }
 
@@ -935,7 +947,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
       }
 
       setStudents(migratedStudents);
-      setClasses(dbClasses);
+      setClasses(sortClasses(dbClasses));
       setDbLoading(false);
     }
     load();
@@ -967,7 +979,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
         } else {
           setClasses(prev => {
             const idx = prev.findIndex(c => c.id === n.id);
-            return idx >= 0 ? prev.map((c, i) => i === idx ? n.data : c) : [...prev, n.data];
+            return sortClasses(idx >= 0 ? prev.map((c, i) => i === idx ? n.data : c) : [...prev, n.data]);
           });
         }
       })
@@ -1001,7 +1013,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const addClass = (cls) => {
     const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
     const newCls = { ...cls, id, fullName: cls.fullName || cls.name };
-    setClasses(prev => [...prev, newCls]);
+    setClasses(prev => sortClasses([...prev, newCls]));
     syncClassToDb(newCls);
     showToast(`Added class "${cls.name}"`);
   };
@@ -1187,7 +1199,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   );
 
   return (
-    <ClassesContext.Provider value={{ classes: [...classes].sort((a, b) => { const ai = INITIAL_CLASSES.findIndex(c => c.id === a.id); const bi = INITIAL_CLASSES.findIndex(c => c.id === b.id); return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi); }), setClasses, addClass, updateClass, deleteClass }}>
+    <ClassesContext.Provider value={{ classes, setClasses, addClass, updateClass, deleteClass }}>
       <style>{FONT_IMPORT + `
         :root {
           --bg: #FAF6EF;
