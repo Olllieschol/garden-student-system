@@ -415,7 +415,11 @@ function ageFromDob(dob) {
 function isoAddDays(iso, n) {
   const d = new Date(iso + 'T00:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  // Use local date components (not toISOString which shifts to UTC and can change the date in UTC+x timezones)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // Parse free-text holiday suspension notes into structured date ranges.
