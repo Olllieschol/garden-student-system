@@ -423,62 +423,88 @@ function isoAddDays(iso, n) {
 }
 
 // Parse free-text holiday suspension notes into structured date ranges.
-// Returns { ranges: [{start,end}], remainingNote: string, unparsed: bool }
+// Returns { ranges: [{start,end}], remainingNote: string } or null if nothing found.
 function parseHolidaySuspensionNote(note) {
   if (!note) return null;
   const MONTHS = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
     january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12 };
+  const MP = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
 
-  const toIso = (day, month, year) => {
-    const m = String(MONTHS[month.toLowerCase()]).padStart(2, '0');
-    const d = String(day).padStart(2, '0');
-    const y = year || new Date().getFullYear();
-    return `${y}-${m}-${d}`;
+  const parseYear = (yr) => {
+    if (!yr) return new Date().getFullYear();
+    const n = parseInt(yr);
+    return n < 100 ? 2000 + n : n; // "25" → 2025, "2025" → 2025
+  };
+  const toIso = (day, mon, year) => {
+    const mNum = MONTHS[mon.toLowerCase()];
+    if (!mNum) return null;
+    return `${year}-${String(mNum).padStart(2,'0')}-${String(parseInt(day)).padStart(2,'0')}`;
+  };
+  const lastDayIso = (mon, year) => {
+    const mNum = MONTHS[mon.toLowerCase()];
+    if (!mNum) return null;
+    const last = new Date(year, mNum, 0).getDate(); // day 0 of next month = last day of this month
+    return `${year}-${String(mNum).padStart(2,'0')}-${String(last).padStart(2,'0')}`;
   };
 
-  // Patterns:
-  // "2 - 12 March 2026", "2 Mar – 12 Mar", "4–22 May 2026", "6 - 22 June"
-  const REX = /(\d{1,2})\s*[-–—]\s*(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{4})?/gi;
-  // Same-month range: "13 Mar – 3 Apr 2026" with different month for end
-  const REX2 = /(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*[-–—]\s*(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s*(\d{4})?/gi;
+  // Track which character positions are already claimed to prevent double-matching
+  const claimedRanges = []; // [{from, to}] index ranges in note
+  const isClaimed = (matchIndex, matchLen) => claimedRanges.some(r => matchIndex < r.to && matchIndex + matchLen > r.from);
+  const claim = (matchIndex, matchLen) => claimedRanges.push({ from: matchIndex, to: matchIndex + matchLen });
 
   const ranges = [];
-  let workingNote = note;
 
-  // Strip common prefixes so we can remove them after parsing
-  const prefixRex = /\b(Holiday\s*Suspension\s*:?\s*|HS\s*(?:From\s*|[0-9]\.\s*)?)/gi;
-
-  // Match cross-month ranges first (more specific)
+  // ── Pattern A: "8 Feb - 1 Mar 2026"  (day+month – day+month [year])
+  // Also handles cross-year: if end month < start month, start year = end year - 1
+  const PA = new RegExp(`(\\d{1,2})\\s+(${MP})\\s*[-–—]\\s*(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?`, 'gi');
   let m;
-  REX2.lastIndex = 0;
-  while ((m = REX2.exec(note)) !== null) {
-    const [full, d1, mon1, d2, mon2, yr] = m;
-    const year = yr ? parseInt(yr) : new Date().getFullYear();
-    try {
-      ranges.push({ start: toIso(d1, mon1, year), end: toIso(d2, mon2, year), _match: full });
-    } catch {}
+  PA.lastIndex = 0;
+  while ((m = PA.exec(note)) !== null) {
+    if (isClaimed(m.index, m[0].length)) continue;
+    const [full, d1, mon1, d2, mon2, yrRaw] = m;
+    const y2 = parseYear(yrRaw);
+    const m1n = MONTHS[mon1.toLowerCase()], m2n = MONTHS[mon2.toLowerCase()];
+    const y1 = (m1n && m2n && m1n > m2n) ? y2 - 1 : y2; // crossed year boundary
+    const start = toIso(d1, mon1, y1);
+    const end   = toIso(d2, mon2, y2);
+    if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
   }
 
-  // Match same-month ranges
-  REX.lastIndex = 0;
-  while ((m = REX.exec(note)) !== null) {
-    const [full, d1, d2, mon, yr] = m;
-    // Skip if already matched by REX2
-    const alreadyCovered = ranges.some(r => r._match && note.indexOf(r._match) <= note.indexOf(full) && note.indexOf(r._match) + r._match.length >= note.indexOf(full) + full.length);
-    if (alreadyCovered) continue;
-    const year = yr ? parseInt(yr) : new Date().getFullYear();
-    try {
-      ranges.push({ start: toIso(d1, mon, year), end: toIso(d2, mon, year), _match: full });
-    } catch {}
+  // ── Pattern B: "24 Nov 25 - Jan 2026"  (day+month+[year] – month+year, NO end day)
+  // End defaults to last day of the end month.
+  const PB = new RegExp(`(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?\\s*[-–—]\\s*(${MP})\\s+(\\d{4})`, 'gi');
+  PB.lastIndex = 0;
+  while ((m = PB.exec(note)) !== null) {
+    if (isClaimed(m.index, m[0].length)) continue;
+    const [full, d1, mon1, yr1Raw, mon2, yr2Raw] = m;
+    const y2 = parseYear(yr2Raw);
+    const y1 = yr1Raw ? parseYear(yr1Raw) : y2;
+    const start = toIso(d1, mon1, y1);
+    const end   = lastDayIso(mon2, y2); // no day given → last day of end month
+    if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
+  }
+
+  // ── Pattern C: "14 - 18 July 2025"  (day – day month [year], same month)
+  const PC = new RegExp(`(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?`, 'gi');
+  PC.lastIndex = 0;
+  while ((m = PC.exec(note)) !== null) {
+    if (isClaimed(m.index, m[0].length)) continue;
+    const [full, d1, d2, mon, yrRaw] = m;
+    const year = parseYear(yrRaw);
+    const start = toIso(d1, mon, year);
+    const end   = toIso(d2, mon, year);
+    if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
   }
 
   if (ranges.length === 0) return null;
 
-  // Remove parsed sections and the HS prefix from the note
+  // Sort by start date for clean display
+  ranges.sort((a, b) => a.start.localeCompare(b.start));
+
+  // Remove parsed sections + common HS prefixes from the note
+  const prefixRex = /\b(Holiday\s*Suspension\s*:?\s*|HS\s*(?:From\s*|[0-9]+\.\s*)?)/gi;
   let cleaned = note;
-  for (const r of ranges) {
-    if (r._match) cleaned = cleaned.replace(r._match, '');
-  }
+  for (const r of ranges) { if (r._match) cleaned = cleaned.replace(r._match, ''); }
   cleaned = cleaned.replace(prefixRex, '').replace(/\s*[,;]\s*/g, ' ').replace(/\s*\d+\.\s*/g, ' ').trim();
 
   return {
