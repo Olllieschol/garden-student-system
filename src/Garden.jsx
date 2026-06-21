@@ -1844,7 +1844,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
                 className="absolute left-0 top-full mt-1 z-50 rounded-md border shadow-xl py-1 min-w-max"
                 style={{ background: 'var(--paper)', borderColor: 'var(--line)', overscrollBehavior: 'contain' }}
                 onWheel={e => e.stopPropagation()}>
-              {Object.entries(STATUSES).filter(([k]) => ['suspended','wait_list','enrolled'].includes(k)).map(([k, v]) => (
+              {Object.entries(STATUSES).filter(([k]) => ['suspended','enrolled'].includes(k)).map(([k, v]) => (
                 <button
                   key={k}
                   onClick={() => { onUpdate(student.id, { status: k }); setStatusOpen(false); }}
