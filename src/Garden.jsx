@@ -1364,6 +1364,10 @@ function GardenApp({ initialCentre = 'canggu' }) {
               siblings: [],
             }));
           }
+          // Run HS migration immediately so chips populate from note text right away
+          const { students: migratedImport } = migrateHolidaySuspensionNotes(newStudents);
+          newStudents = migratedImport;
+
           if (supabase) {
             suppressRealtime.current = true;
             try {
