@@ -678,7 +678,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [centre, setCentre] = useState(initialCentre);
-  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: true, sanur: true }); // both unlocked since gate is on login screen
+  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: initialCentre === 'canggu', sanur: initialCentre === 'sanur' });
   const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
   const [weekIdx, setWeekIdx] = useState(TODAY_WEEK_IDX);
