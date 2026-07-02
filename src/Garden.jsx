@@ -450,7 +450,9 @@ function parseHolidaySuspensionNote(note) {
   const toIso = (day, mon, year) => {
     const mNum = MONTHS[mon.toLowerCase()];
     if (!mNum) return null;
-    return `${year}-${String(mNum).padStart(2,'0')}-${String(parseInt(day)).padStart(2,'0')}`;
+    const maxDay = new Date(year, mNum, 0).getDate(); // last valid day of this month
+    const d = Math.min(Math.max(parseInt(day), 1), maxDay); // clamp so we never emit e.g. 31 Jun
+    return `${year}-${String(mNum).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   };
   const lastDayIso = (mon, year) => {
     const mNum = MONTHS[mon.toLowerCase()];
@@ -2012,11 +2014,15 @@ function SuspensionSection({ student, onUpdate }) {
 const HS_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtHSSummary(suspensions) {
   if (!suspensions || suspensions.length === 0) return null;
+  const curYear = new Date().getFullYear();
+  const yr = (y) => y === curYear ? '' : ` ${y}`; // only show year when not the current year
   const parts = suspensions.map(({ start, end }) => {
     if (!start || !end) return null;
     const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
-    if (s.getMonth() === e.getMonth()) return `${s.getDate()}–${e.getDate()} ${HS_MONTHS[s.getMonth()]}`;
-    return `${s.getDate()} ${HS_MONTHS[s.getMonth()]}–${e.getDate()} ${HS_MONTHS[e.getMonth()]}`;
+    const sy = s.getFullYear(), ey = e.getFullYear();
+    if (s.getMonth() === e.getMonth() && sy === ey) return `${s.getDate()}–${e.getDate()} ${HS_MONTHS[s.getMonth()]}${yr(ey)}`;
+    // cross-month (and possibly cross-year): show start year only if it differs from end year
+    return `${s.getDate()} ${HS_MONTHS[s.getMonth()]}${sy !== ey ? yr(sy) : ''}–${e.getDate()} ${HS_MONTHS[e.getMonth()]}${yr(ey)}`;
   }).filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }
@@ -2042,9 +2048,6 @@ function SuspensionCell({ student, onUpdate }) {
   };
   const del = (i, e) => { e.stopPropagation(); onUpdate(student.id, { suspensions: susp.filter((_, idx) => idx !== i) }); };
 
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const fmt = (iso) => { if (!iso) return ''; const d = new Date(iso + 'T00:00:00'); return `${d.getDate()} ${M[d.getMonth()]}`; };
-
   if (open) return (
     <div className="flex flex-col gap-1.5 py-1 min-w-[200px]" onClick={e => e.stopPropagation()}>
       <div className="flex gap-1.5">
@@ -2066,7 +2069,7 @@ function SuspensionCell({ student, onUpdate }) {
         ? <button onClick={openAdd} className="text-xs italic hover:underline" style={{ color: 'var(--ink-faint)' }}>— add</button>
         : susp.map((s, i) => (
           <span key={i} className="inline-flex items-center gap-1 text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded group">
-            {fmt(s.start)}–{fmt(s.end)}
+            {fmtHSSummary([s])}
             <button onClick={(e) => openEdit(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-blue-900 transition" title="Edit"><Edit3 size={8} /></button>
             <button onClick={(e) => del(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition" title="Remove"><X size={8} /></button>
           </span>
@@ -2888,15 +2891,20 @@ function guessGenderFromName(fullName) {
   return 'X';
 }
 
+// Full month-name lookup, including long forms (e.g. "july", "january") — the old map
+// only had 3-letter keys plus "june", so "8-July-2026" silently failed to parse.
+const EXCEL_DATE_MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11,
+  january:0,february:1,march:2,april:3,june:5,july:6,august:7,september:8,october:9,november:10,december:11 };
+
 function excelDateToISO(v) {
   if (!v) return '';
   if (typeof v === 'string') {
     const s = v.trim();
     if (!s || s.toLowerCase() === 'tbc' || s === '–' || s === '-') return s;
-    const m = s.match(/^(\d{1,2})-([A-Za-z]{3,})-(\d{2,4})$/);
+    // Accepts both dash- and space-separated "D Mon YY(YY)", e.g. "30-Aug-25" or "8 Sep 25"
+    const m = s.match(/^(\d{1,2})[\s-]+([A-Za-z]{3,})[\s-]+(\d{2,4})$/);
     if (m) {
-      const months = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,june:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
-      const mon = months[m[2].toLowerCase()];
+      const mon = EXCEL_DATE_MONTHS[m[2].toLowerCase()];
       if (mon !== undefined) {
         let yr = parseInt(m[3]);
         if (yr < 100) yr += yr < 50 ? 2000 : 1900;
@@ -2944,22 +2952,38 @@ function parseSpreadsheetFile(file) {
           const COL = buildColMap(blockOffset, baseOffset);
           let sheetStudentCount = 0;
 
+          // Sections below the main active-student table (WAITLIST, Invoice sent, Quote sent) use the
+          // same column layout and carry their own status. `section` tracks which one we're currently in;
+          // 'between' means we've passed the active table's totals row but haven't found the next section
+          // header yet — rows here are skipped (with a warning) rather than mis-classified as active.
+          let section = 'enrolled';
           for (let ri = 3; ri < rows.length; ri++) {
             const row = rows[ri];
             const childName = String(row[COL.name] || '').trim();
             const col0 = String(row[COL.no] || '').trim().toLowerCase();
             const col1Lower = childName.toLowerCase();
+            // Section header text can land anywhere from the "No" column through DOB (merged header cells
+            // start at varying columns), so scan that whole window rather than just name/no.
+            const headerScan = row.slice(COL.no, COL.dob + 1).map(c => String(c ?? '')).join(' ').toLowerCase();
+
             if (col1Lower.startsWith('total') || col1Lower.includes('holiday suspension') ||
                 col1Lower === 'full day' || col1Lower === 'half day' ||
-                col0 === 'total' || col0 === 'full day' || col0 === 'half day') break;
+                col0 === 'total' || col0 === 'full day' || col0 === 'half day') { section = 'between'; continue; }
+            if (/wait[\s-]?list/.test(headerScan)) { section = 'wait_list'; continue; }
+            if (/invoice/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'invoice_sent'; continue; }
+            if (/quote/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'quote_sent'; continue; }
             if (!childName || /^\d+$/.test(childName)) continue;
             if (col1Lower === 'child name' || col1Lower === 'no') continue;
+            if (section === 'between') {
+              result.warnings.push(`"${childName}" (${sheetName}): row found between sections — couldn't tell which status it belongs to, skipped`);
+              continue;
+            }
 
             const student = {
               name: childName,
               gender: guessGenderFromName(childName),
               classId: finalClassId,
-              status: 'enrolled',
+              status: section,
               dob: excelDateToISO(row[COL.dob]),
               nationality: String(row[COL.nationality] || '').trim(),
               parents: String(row[COL.parents] || '').trim(),
