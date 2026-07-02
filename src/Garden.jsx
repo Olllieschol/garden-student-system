@@ -1121,7 +1121,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const cycleDay = (id, day) => {
     const s = students.find(x => x.id === id);
     if (!s) return;
-    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': '' }[s[day] || ''] });
+    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[s[day] || ''] });
   };
 
   const handleParsedConfirm = (p) => {
@@ -1429,8 +1429,9 @@ function GardenApp({ initialCentre = 'canggu' }) {
               mon: s.mon || '', tue: s.tue || '', wed: s.wed || '', thu: s.thu || '', fri: s.fri || '',
               lunch: s.lunch || false,
               note: s.note || '',
+              holidaySuspension: s.holidaySuspension || '',
               dietaryFlags: [],
-              suspensions: [],
+              suspensions: (parseHolidaySuspensionNote(s.holidaySuspension || '')?.ranges || []).map(r => ({ ...r, fromImport: true })),
               originalStart: s.originalStart || '',
               returningDate: '',
               lastDate: s.lastDate || '',
@@ -1445,10 +1446,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
               siblings: [],
             }));
           }
-          // Run HS migration immediately so chips populate from note text right away
-          const { students: migratedImport } = migrateHolidaySuspensionNotes(newStudents);
-          newStudents = migratedImport;
-
           if (supabase) {
             suppressRealtime.current = true;
             try {
@@ -1685,7 +1682,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       <SpreadsheetWithTopScroll active={active} incoming={filteredIncoming} waitlist={waitlist} left={left} totals={totals} students={filteredStudents} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
 
       <div className="mt-4 text-xs flex items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
-        <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → empty. Status cycles workflow. Scroll table sideways for more columns.
+        <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → S → empty. Status cycles workflow. Scroll table sideways for more columns.
       </div>
     </div>
   );
@@ -1898,6 +1895,20 @@ function EditableCell({ value, onSave, type = 'text', options, placeholder = '�
         </select>
       );
     }
+    if (multiline) {
+      return (
+        <textarea
+          autoFocus
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => { if (e.key === 'Escape') cancel(); }}
+          rows={3}
+          className={`w-full px-1 py-0.5 border rounded text-xs bg-white focus:outline-none resize-y ${mono ? 'font-mono' : ''}`}
+          style={{ borderColor: 'var(--accent)' }}
+        />
+      );
+    }
     return (
       <input
         autoFocus
@@ -2046,74 +2057,6 @@ function SuspensionSection({ student, onUpdate }) {
   );
 }
 
-const HS_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmtHSSummary(suspensions) {
-  if (!suspensions || suspensions.length === 0) return null;
-  const curYear = new Date().getFullYear();
-  const yr = (y) => y === curYear ? '' : ` ${y}`; // only show year when not the current year
-  const parts = suspensions.map(({ start, end }) => {
-    if (!start || !end) return null;
-    const s = new Date(start + 'T00:00:00'), e = new Date(end + 'T00:00:00');
-    const sy = s.getFullYear(), ey = e.getFullYear();
-    if (s.getMonth() === e.getMonth() && sy === ey) return `${s.getDate()}–${e.getDate()} ${HS_MONTHS[s.getMonth()]}${yr(ey)}`;
-    // cross-month (and possibly cross-year): show start year only if it differs from end year
-    return `${s.getDate()} ${HS_MONTHS[s.getMonth()]}${sy !== ey ? yr(sy) : ''}–${e.getDate()} ${HS_MONTHS[e.getMonth()]}${yr(ey)}`;
-  }).filter(Boolean);
-  return parts.length ? parts.join(', ') : null;
-}
-
-function SuspensionCell({ student, onUpdate }) {
-  const [open, setOpen] = useState(false);
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [editIdx, setEditIdx] = useState(null);
-  const susp = student.suspensions || [];
-
-  const openAdd = (e) => { e.stopPropagation(); setEditIdx(null); setStart(''); setEnd(''); setOpen(true); };
-  const openEdit = (i, e) => { e.stopPropagation(); setEditIdx(i); setStart(susp[i].start); setEnd(susp[i].end); setOpen(true); };
-  const cancel = (e) => { e?.stopPropagation(); setOpen(false); setEditIdx(null); setStart(''); setEnd(''); };
-  const save = (e) => {
-    e.stopPropagation();
-    if (!start || !end || end < start) return;
-    const updated = editIdx !== null
-      ? susp.map((s, i) => i === editIdx ? { start, end } : s)
-      : [...susp, { start, end }];
-    onUpdate(student.id, { suspensions: updated });
-    cancel();
-  };
-  const del = (i, e) => { e.stopPropagation(); onUpdate(student.id, { suspensions: susp.filter((_, idx) => idx !== i) }); };
-
-  if (open) return (
-    <div className="flex flex-col gap-1.5 py-1 min-w-[200px]" onClick={e => e.stopPropagation()}>
-      <div className="flex gap-1.5">
-        <input type="date" autoFocus value={start} onChange={e => setStart(e.target.value)} placeholder="Start" className="flex-1 text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--accent)' }} />
-        <input type="date" value={end} onChange={e => setEnd(e.target.value)} placeholder="End" className="flex-1 text-xs border rounded px-1.5 py-1" style={{ borderColor: 'var(--line)' }} />
-      </div>
-      <div className="flex gap-1">
-        <button onClick={save} disabled={!start || !end || end < start} className="flex-1 py-0.5 rounded text-xs text-white disabled:opacity-40" style={{ background: 'var(--accent)' }}>
-          {editIdx !== null ? 'Save' : 'Add'}
-        </button>
-        <button onClick={cancel} className="px-2 py-0.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>✕</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5" onClick={e => e.stopPropagation()}>
-      {susp.length === 0
-        ? <button onClick={openAdd} className="text-xs italic hover:underline" style={{ color: 'var(--ink-faint)' }}>— add</button>
-        : susp.map((s, i) => (
-          <span key={i} className="inline-flex items-center gap-1 text-xs font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded group">
-            {fmtHSSummary([s])}
-            <button onClick={(e) => openEdit(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-blue-900 transition" title="Edit"><Edit3 size={8} /></button>
-            <button onClick={(e) => del(i, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition" title="Remove"><X size={8} /></button>
-          </span>
-        ))
-      }
-      {susp.length > 0 && <button onClick={openAdd} className="text-blue-400 hover:text-blue-600 transition" title="Add another"><Plus size={10} /></button>}
-    </div>
-  );
-}
 
 function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStudent, dimmed }) {
   const { classes } = useClasses();
@@ -2232,7 +2175,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
           <td key={day} className="px-1 py-2 text-center">
             {suspended
               ? <div className="w-7 h-7 rounded text-xs font-mono font-medium bg-blue-50 text-blue-400 flex items-center justify-center mx-auto" title="Holiday suspension">S</div>
-              : <button onClick={() => onCycleDay(student.id, day)} className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${student[day] === 'F' ? 'bg-emerald-100 text-emerald-900' : student[day] === 'H' ? 'bg-amber-100 text-amber-900' : 'text-stone-300 hover:bg-stone-100'}`}>{student[day] || '·'}</button>
+              : <button onClick={() => onCycleDay(student.id, day)} className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${student[day] === 'F' ? 'bg-emerald-100 text-emerald-900' : student[day] === 'H' ? 'bg-amber-100 text-amber-900' : student[day] === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'}`}>{student[day] || '·'}</button>
             }
           </td>
         );
@@ -2272,7 +2215,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" />
       </td>
       <td className="px-2 py-2 text-xs" style={{ minWidth: '160px' }}>
-        <SuspensionCell student={student} onUpdate={onUpdate} />
+        <EditableCell value={student.holidaySuspension} onSave={v => onUpdate(student.id, { holidaySuspension: v })} placeholder="— add" multiline />
       </td>
       <td className="px-2 py-2 text-xs">
         <TransitionCell student={student} onUpdate={onUpdate} />
@@ -2518,11 +2461,11 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             {['M','T','W','T','F'].map((d, i) => {
               const key = ['mon','tue','wed','thu','fri'][i];
               const v = student[key];
-              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': '' }[v || ''] });
+              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[v || ''] });
               return (
                 <div key={i} className="flex-1 text-center">
                   <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{d}</div>
-                  <button onClick={cycle} className={`h-9 w-full rounded flex items-center justify-center text-sm font-mono font-medium ${v === 'F' ? 'bg-emerald-100 text-emerald-900' : v === 'H' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-300'}`}>{v || '·'}</button>
+                  <button onClick={cycle} className={`h-9 w-full rounded flex items-center justify-center text-sm font-mono font-medium ${v === 'F' ? 'bg-emerald-100 text-emerald-900' : v === 'H' ? 'bg-amber-100 text-amber-900' : v === 'S' ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-300'}`}>{v || '·'}</button>
                 </div>
               );
             })}
@@ -3089,6 +3032,7 @@ function parseSpreadsheetFile(file) {
               fri: normaliseDay(row[COL.fri]),
               lunch: normaliseLunch(row[COL.lunch]),
               note: String(row[COL.note] || '').trim(),
+              holidaySuspension: String(row[COL.holidaySuspension] || '').trim(),
               originalStart: excelDateToISO(row[COL.originalStart]),
               lastDate: excelDateToISO(row[COL.lastDate]),
               lengthOfStay: String(row[COL.lengthOfStay] || '').trim(),
@@ -3098,10 +3042,6 @@ function parseSpreadsheetFile(file) {
               invoiceNote: '',
               _sheet: sheetName,
             };
-            const suspText = String(row[COL.holidaySuspension] || '').trim();
-            if (suspText) {
-              student.note = student.note ? `${student.note}\n\nHoliday Suspension:\n${suspText}` : `Holiday Suspension:\n${suspText}`;
-            }
             if (!student.dob) result.warnings.push(`"${student.name}" (${sheetName}): no date of birth`);
             result.students.push(student);
             sheetStudentCount++;
@@ -4167,7 +4107,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
   const [days, setDays] = useState({ mon: '', tue: '', wed: '', thu: '', fri: '' });
   const [lunch, setLunch] = useState(false);
 
-  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': '' }[prev[d] || ''] }));
+  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[prev[d] || ''] }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(27,26,23,0.5)' }}>
@@ -4240,7 +4180,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
               {['mon','tue','wed','thu','fri'].map((d, i) => (
                 <div key={d} className="flex-1 text-center">
                   <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{['M','T','W','T','F'][i]}</div>
-                  <button onClick={() => cycleDay(d)} className={`w-full h-10 rounded text-sm font-mono font-medium transition ${days[d] === 'F' ? 'bg-emerald-100 text-emerald-900' : days[d] === 'H' ? 'bg-amber-100 text-amber-900' : 'bg-stone-100 text-stone-300'}`}>{days[d] || '·'}</button>
+                  <button onClick={() => cycleDay(d)} className={`w-full h-10 rounded text-sm font-mono font-medium transition ${days[d] === 'F' ? 'bg-emerald-100 text-emerald-900' : days[d] === 'H' ? 'bg-amber-100 text-amber-900' : days[d] === 'S' ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-300'}`}>{days[d] || '·'}</button>
                 </div>
               ))}
               <div className="flex-1 text-center">
