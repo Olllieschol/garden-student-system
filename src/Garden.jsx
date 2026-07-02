@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from './supabase.js';
 import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2 } from 'lucide-react';
 
@@ -2100,6 +2101,16 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   const susCount = susWeeks;
 
   const [statusOpen, setStatusOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const statusBtnRef = useRef(null);
+  const openStatusMenu = () => {
+    const rect = statusBtnRef.current.getBoundingClientRect();
+    setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    setStatusOpen(true);
+  };
+  // Pipeline students move between the pre-enrolment stages, not to/from suspension.
+  const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list'].includes(student.status);
+  const statusOptions = isPipeline ? ['quote_sent', 'wait_list', 'invoice_sent'] : ['suspended', 'enrolled'];
   const cycleInvoice = () => {
     const order = ['not_sent','sent','paid','prepay'];
     const i = order.indexOf(student.invoiceStatus || 'not_sent');
@@ -2130,31 +2141,36 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       <td className="px-3 py-2">
         <div className="relative inline-block">
           <button
-            onClick={() => setStatusOpen(o => !o)}
+            ref={statusBtnRef}
+            onClick={() => statusOpen ? setStatusOpen(false) : openStatusMenu()}
             className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-full border ${status.chip} whitespace-nowrap`}>
             <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
             {status.label}
           </button>
-          {statusOpen && (
+          {statusOpen && menuPos && createPortal(
             <>
               <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
               <div
-                className="absolute left-0 top-full mt-1 z-50 rounded-md border shadow-xl py-1 min-w-max"
-                style={{ background: 'var(--paper)', borderColor: 'var(--line)', overscrollBehavior: 'contain' }}
+                className="fixed z-50 rounded-md border shadow-xl py-1 min-w-max"
+                style={{ top: menuPos.top, left: menuPos.left, background: 'var(--paper)', borderColor: 'var(--line)', overscrollBehavior: 'contain' }}
                 onWheel={e => e.stopPropagation()}>
-              {Object.entries(STATUSES).filter(([k]) => ['suspended','enrolled'].includes(k)).map(([k, v]) => (
-                <button
-                  key={k}
-                  onClick={() => { onUpdate(student.id, { status: k }); setStatusOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 transition ${student.status === k ? 'font-semibold' : ''}`}
-                  style={{ color: 'var(--ink)' }}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${v.dot} shrink-0`} />
-                  {v.label}
-                  {student.status === k && <Check size={10} className="ml-auto" />}
-                </button>
-              ))}
+              {statusOptions.map(k => {
+                const v = STATUSES[k];
+                return (
+                  <button
+                    key={k}
+                    onClick={() => { onUpdate(student.id, { status: k }); setStatusOpen(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 transition ${student.status === k ? 'font-semibold' : ''}`}
+                    style={{ color: 'var(--ink)' }}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${v.dot} shrink-0`} />
+                    {v.label}
+                    {student.status === k && <Check size={10} className="ml-auto" />}
+                  </button>
+                );
+              })}
             </div>
-            </>
+            </>,
+            document.body
           )}
         </div>
       </td>
