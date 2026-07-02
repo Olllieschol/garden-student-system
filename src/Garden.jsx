@@ -2957,6 +2957,7 @@ function parseSpreadsheetFile(file) {
           // 'between' means we've passed the active table's totals row but haven't found the next section
           // header yet — rows here are skipped (with a warning) rather than mis-classified as active.
           let section = 'enrolled';
+          let blankRunLength = 0;
           for (let ri = 3; ri < rows.length; ri++) {
             const row = rows[ri];
             const childName = String(row[COL.name] || '').trim();
@@ -2965,6 +2966,21 @@ function parseSpreadsheetFile(file) {
             // Section header text can land anywhere from the "No" column through DOB (merged header cells
             // start at varying columns), so scan that whole window rather than just name/no.
             const headerScan = row.slice(COL.no, COL.dob + 1).map(c => String(c ?? '')).join(' ').toLowerCase();
+
+            // A run of fully blank rows means we've run off the end of the sheet's real content —
+            // stop scanning rather than continuing indefinitely toward rows.length.
+            const isBlankRow = row.every(c => String(c ?? '').trim() === '');
+            if (isBlankRow) {
+              blankRunLength++;
+              if (blankRunLength >= 4) break;
+              continue;
+            }
+            blankRunLength = 0;
+
+            // "Recently left" marks the end of anything relevant to current pipeline status — hard-stop
+            // the whole sheet scan here (like the old TOTAL-row break) instead of continuing past it,
+            // which is what let historical/other-class content leak into this sheet's results.
+            if (/recently\s*left/.test(headerScan)) break;
 
             if (col1Lower.startsWith('total') || col1Lower.includes('holiday suspension') ||
                 col1Lower === 'full day' || col1Lower === 'half day' ||
