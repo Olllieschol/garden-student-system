@@ -1486,6 +1486,22 @@ function GardenApp({ initialCentre = 'canggu' }) {
           <main className="flex-1 flex flex-col overflow-hidden">
             <header className="border-b flex items-center justify-between px-8 h-16" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
               <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 p-0.5 rounded-md" style={{ border: '1px solid var(--line)' }}>
+                  <button
+                    onClick={undo}
+                    disabled={undoStack.length === 0}
+                    title="Undo (Cmd+Z)"
+                    className="p-1 rounded transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
+                    <Undo2 size={14} />
+                  </button>
+                  <button
+                    onClick={redo}
+                    disabled={redoStack.length === 0}
+                    title="Redo (Cmd+Shift+Z)"
+                    className="p-1 rounded transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
+                    <Redo2 size={14} />
+                  </button>
+                </div>
                 <Building2 size={16} style={{ color: 'var(--ink-faint)' }} />
                 <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>{centre === 'canggu' ? 'Canggu' : 'Sanur'}</span>
                 <ChevronRight size={14} style={{ color: 'var(--ink-faint)' }} />
@@ -1635,23 +1651,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
             <Check size={14} /> {toast}
           </div>
         )}
-
-        <div className="fixed bottom-6 left-6 flex items-center gap-1 p-1 rounded-lg shadow-lg" style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
-          <button
-            onClick={undo}
-            disabled={undoStack.length === 0}
-            title="Undo (Cmd+Z)"
-            className="p-2 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
-            <Undo2 size={16} />
-          </button>
-          <button
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            title="Redo (Cmd+Shift+Z)"
-            className="p-2 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
-            <Redo2 size={16} />
-          </button>
-        </div>
       </div>
     </ClassesContext.Provider>
   );
