@@ -502,15 +502,29 @@ function parseHolidaySuspensionNote(note) {
     if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
   }
 
-  // ── Pattern B: "24 Nov 25 - Jan 2026"  (day+month+[year] – month+year, NO end day)
-  // End defaults to last day of the end month.
-  const PB = new RegExp(`(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?\\s*[-–—]\\s*(${MP})\\s+(\\d{4})`, 'gi');
+  // ── Pattern B: "24 Nov 25 - Jan 2026" or "18 May - August"  (day+month+[year] – month+[year], NO end day)
+  // End defaults to last day of the end month. The end year is optional (open-ended notes like
+  // "18 May - August" are common) — when omitted, infer the same year as the start, unless the
+  // end month numerically precedes the start month, which means the range wraps into next year
+  // (e.g. "20 Dec - Feb" runs Dec this year through Feb the following year).
+  const PB = new RegExp(`(\\d{1,2})\\s+(${MP})(?:\\s+(\\d{2,4}))?\\s*[-–—]\\s*(${MP})(?:\\s+(\\d{2,4}))?`, 'gi');
   PB.lastIndex = 0;
   while ((m = PB.exec(note)) !== null) {
     if (isClaimed(m.index, m[0].length)) continue;
     const [full, d1, mon1, yr1Raw, mon2, yr2Raw] = m;
-    const y2 = parseYear(yr2Raw);
-    const y1 = yr1Raw ? parseYear(yr1Raw) : y2;
+    const m1n = MONTHS[mon1.toLowerCase()], m2n = MONTHS[mon2.toLowerCase()];
+    const curYear = new Date().getFullYear();
+    let y1, y2;
+    if (yr1Raw) {
+      y1 = parseYear(yr1Raw);
+      y2 = yr2Raw ? parseYear(yr2Raw) : (m1n && m2n && m2n < m1n ? y1 + 1 : y1);
+    } else if (yr2Raw) {
+      y2 = parseYear(yr2Raw);
+      y1 = (m1n && m2n && m1n > m2n) ? y2 - 1 : y2;
+    } else {
+      y1 = curYear;
+      y2 = (m1n && m2n && m2n < m1n) ? y1 + 1 : y1;
+    }
     const start = toIso(d1, mon1, y1);
     const end   = lastDayIso(mon2, y2); // no day given → last day of end month
     if (start && end && end >= start) { ranges.push({ start, end, _match: full, _idx: m.index }); claim(m.index, full.length); }
