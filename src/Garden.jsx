@@ -1530,7 +1530,12 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   // meaningful "active in this week" state — filtering them by inWeek hid anyone whose prospective
   // start date fell after the currently-viewed week, even though they belong in the pipeline list
   // regardless of which week is selected.
-  const waitlist = filterByStatus(students.filter(matchesSearch)).filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
+  // Auto-order the pipeline list by how close each student is to enrolling: Wait list first,
+  // then Invoice sent, then Quote sent, then bare Inquiries.
+  const PIPELINE_ORDER = { wait_list: 0, invoice_sent: 1, quote_sent: 2, inquiry: 3 };
+  const waitlist = filterByStatus(students.filter(matchesSearch))
+    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status))
+    .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status]);
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
   const enrolledCount = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
@@ -2110,7 +2115,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   };
   // Pipeline students move between the pre-enrolment stages, not to/from suspension.
   const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list'].includes(student.status);
-  const statusOptions = isPipeline ? ['quote_sent', 'wait_list', 'invoice_sent'] : ['suspended', 'enrolled'];
+  const statusOptions = isPipeline ? ['wait_list', 'invoice_sent', 'quote_sent', 'enrolled'] : ['suspended', 'enrolled'];
   const cycleInvoice = () => {
     const order = ['not_sent','sent','paid','prepay'];
     const i = order.indexOf(student.invoiceStatus || 'not_sent');
@@ -2159,7 +2164,15 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
                 return (
                   <button
                     key={k}
-                    onClick={() => { onUpdate(student.id, { status: k }); setStatusOpen(false); }}
+                    onClick={() => {
+                      // Pipeline students often carry a stale imported "Last Date" that has no real
+                      // meaning until they've actually started — clear it when moving them into
+                      // Enrolled so they aren't immediately treated as already left (see ownStudents).
+                      const patch = { status: k };
+                      if (isPipeline && k === 'enrolled') patch.lastDate = '';
+                      onUpdate(student.id, patch);
+                      setStatusOpen(false);
+                    }}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-stone-50 transition ${student.status === k ? 'font-semibold' : ''}`}
                     style={{ color: 'var(--ink)' }}>
                     <span className={`w-1.5 h-1.5 rounded-full ${v.dot} shrink-0`} />
