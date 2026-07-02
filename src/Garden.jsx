@@ -2974,13 +2974,25 @@ function excelDateToISO(v) {
   return String(v);
 }
 
+// The source spreadsheet colours a day cell tan/brown ("FCE5CD") and leaves it textless to mark
+// a Holiday Suspension day — this is the *only* signal for those cells, so we read the cell's
+// fill colour directly (requires XLSX.read to be called with { cellStyles: true }) rather than
+// relying solely on parsing the Holiday Suspension note text into date ranges. Confirmed via the
+// real workbook that FCE5CD is used consistently for this across every class sheet.
+function isSuspensionFill(cellStyle) {
+  return cellStyle?.patternType === 'solid' && cellStyle.fgColor?.rgb?.toUpperCase() === 'FCE5CD';
+}
+
 function parseSpreadsheetFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+        // cellStyles is required to read each day cell's fill colour, which is how the source
+        // spreadsheet marks Holiday Suspension days (tan/brown fill, "FCE5CD") on days that are
+        // otherwise left blank — there's no text value in those cells to read any other way.
+        const workbook = XLSX.read(data, { type: 'array', cellStyles: true });
         const result = { students: [], warnings: [], sheets: [] };
 
         for (const sheetName of workbook.SheetNames) {
@@ -3076,20 +3088,21 @@ function parseSpreadsheetFile(file) {
               invoiceNote: '',
               _sheet: sheetName,
             };
-            // A blank day cell during this student's holiday suspension period means "gone that day"
-            // in the source spreadsheet (shown there via a tan/brown cell fill, which we can't read from
-            // the file) — fill those in as 'S' rather than leaving them blank, so the app matches the
-            // spreadsheet exactly instead of only inferring suspension via the live week-view overlay.
-            if (student.holidaySuspension && weekDayIsos) {
-              const parsedHs = parseHolidaySuspensionNote(student.holidaySuspension);
-              if (parsedHs) {
-                ['mon', 'tue', 'wed', 'thu', 'fri'].forEach((day, i) => {
-                  if (!student[day] && parsedHs.ranges.some(r => r.start <= weekDayIsos[i] && r.end >= weekDayIsos[i])) {
-                    student[day] = 'S';
-                  }
-                });
-              }
-            }
+            // A blank day cell coloured tan/brown in the source spreadsheet means "gone that day"
+            // (Holiday Suspension) — fill those in as 'S' rather than leaving them blank, so the
+            // app matches the spreadsheet exactly instead of only inferring suspension via the
+            // live week-view overlay. Fill colour (read directly off the cell) is the authoritative
+            // signal; the Holiday Suspension note's parsed date range is kept as a fallback for
+            // cells whose fill didn't come through for any reason.
+            const parsedHs = student.holidaySuspension ? parseHolidaySuspensionNote(student.holidaySuspension) : null;
+            const DAY_COLS = { mon: COL.mon, tue: COL.tue, wed: COL.wed, thu: COL.thu, fri: COL.fri };
+            ['mon', 'tue', 'wed', 'thu', 'fri'].forEach((day, i) => {
+              if (student[day]) return;
+              const addr = XLSX.utils.encode_cell({ r: ri, c: DAY_COLS[day] });
+              const isBrownFill = isSuspensionFill(sheet[addr]?.s);
+              const inParsedRange = weekDayIsos && parsedHs?.ranges.some(r => r.start <= weekDayIsos[i] && r.end >= weekDayIsos[i]);
+              if (isBrownFill || inParsedRange) student[day] = 'S';
+            });
             if (!student.dob) result.warnings.push(`"${student.name}" (${sheetName}): no date of birth`);
             result.students.push(student);
             sheetStudentCount++;
