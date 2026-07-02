@@ -2192,12 +2192,22 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
+        // The suspension-range overlay is just a display hint for days with no explicit stored
+        // value — it must stay clickable (not a plain <div>) so 'S' cycles like every other day
+        // state. Cycle from the raw *stored* value (not the displayed one): a blank cell inside a
+        // suspension range displays 'S' via the overlay, but is still blank underneath, so the
+        // next click must advance blank → 'F' (an explicit override), not blank → '' (a no-op that
+        // would just redisplay 'S' via the overlay again, making the click look like it did nothing).
+        const stored = student[day] || '';
+        const effective = stored || (suspended ? 'S' : '');
         return (
           <td key={day} className="px-1 py-2 text-center">
-            {suspended
-              ? <div className="w-7 h-7 rounded text-xs font-mono font-medium bg-blue-50 text-blue-400 flex items-center justify-center mx-auto" title="Holiday suspension">S</div>
-              : <button onClick={() => onCycleDay(student.id, day)} className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${student[day] === 'F' ? 'bg-emerald-100 text-emerald-900' : student[day] === 'H' ? 'bg-amber-100 text-amber-900' : student[day] === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'}`}>{student[day] || '·'}</button>
-            }
+            <button
+              onClick={() => onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] })}
+              title={suspended ? 'Holiday suspension' : undefined}
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'}`}>
+              {effective || '·'}
+            </button>
           </td>
         );
       })}
