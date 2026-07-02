@@ -6,6 +6,17 @@ import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDash
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');`;
 
+// Format a Date using its LOCAL date components as YYYY-MM-DD.
+// Never use toISOString() for this — it converts to UTC first, which shifts
+// the date back by one day in positive-offset timezones (e.g. Bali, UTC+8),
+// causing off-by-one bugs in week/day and suspension-range comparisons.
+function localIso(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -55,8 +66,8 @@ function buildWeeks() {
     mon.setDate(firstMonday.getDate() + i * 7);
     const fri = new Date(mon);
     fri.setDate(mon.getDate() + 4);
-    const monIso = mon.toISOString().slice(0, 10);
-    const friIso = fri.toISOString().slice(0, 10);
+    const monIso = localIso(mon);
+    const friIso = localIso(fri);
     const label = mon.getMonth() === fri.getMonth()
       ? `${mon.getDate()} – ${fri.getDate()} ${M[mon.getMonth()]} ${mon.getFullYear()}`
       : `${mon.getDate()} ${M[mon.getMonth()]} – ${fri.getDate()} ${M[fri.getMonth()]} ${fri.getFullYear()}`;
@@ -428,11 +439,7 @@ function ageFromDob(dob) {
 function isoAddDays(iso, n) {
   const d = new Date(iso + 'T00:00:00');
   d.setDate(d.getDate() + n);
-  // Use local date components (not toISOString which shifts to UTC and can change the date in UTC+x timezones)
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return localIso(d);
 }
 
 // Parse free-text holiday suspension notes into structured date ranges.
@@ -801,7 +808,7 @@ function exportStudentsToCSV(students) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localIso(new Date());
   a.href = url;
   a.download = `garden-backup-${today}.csv`;
   a.click();
@@ -895,7 +902,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
     setCentreGateTarget(c);
   };
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = localIso(new Date());
   const showToast = m => { setToast(m); setTimeout(() => setToast(null), 3000); };
 
   // Supabase helpers
