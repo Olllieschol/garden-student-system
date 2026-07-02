@@ -1522,7 +1522,11 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const filteredIncoming = incomingStudents.filter(matchesSearch).filter(inWeek);
 
   const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
-  const waitlist = filteredStudents.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
+  // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so they don't have a
+  // meaningful "active in this week" state — filtering them by inWeek hid anyone whose prospective
+  // start date fell after the currently-viewed week, even though they belong in the pipeline list
+  // regardless of which week is selected.
+  const waitlist = filterByStatus(students.filter(matchesSearch)).filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
   const enrolledCount = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
@@ -2968,11 +2972,16 @@ function parseSpreadsheetFile(file) {
             const headerScan = row.slice(COL.no, COL.dob + 1).map(c => String(c ?? '')).join(' ').toLowerCase();
 
             // A run of fully blank rows means we've run off the end of the sheet's real content —
-            // stop scanning rather than continuing indefinitely toward rows.length.
-            const isBlankRow = row.every(c => String(c ?? '').trim() === '');
+            // stop scanning rather than continuing indefinitely toward rows.length. Only look within
+            // this block's own columns: sheets stack up to 5 occupancy-period blocks side by side, and
+            // a row blank in the current block can still have leftover data in another block's columns,
+            // which must not count as "not blank" here. Real sheets have deliberate gaps of 5-7 blank
+            // rows between sections (e.g. Invoice sent -> Quote sent), so the threshold must clear that.
+            const blockCells = row.slice(COL.no, COL.periodUntil + 1);
+            const isBlankRow = blockCells.every(c => String(c ?? '').trim() === '');
             if (isBlankRow) {
               blankRunLength++;
-              if (blankRunLength >= 4) break;
+              if (blankRunLength >= 20) break;
               continue;
             }
             blankRunLength = 0;
