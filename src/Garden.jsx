@@ -2885,7 +2885,17 @@ function findLatestBlock(rows) {
       }
     }
   }
-  return { blockOffset: bestBlock * 25, baseOffset };
+  // The occupancy period always spans a single Mon–Fri working week, and the matched date above is
+  // its Friday (the last "d Month yyyy" token in the period text) — so Monday is just 4 days earlier.
+  // Used to figure out each weekday column's real calendar date, so blank-but-suspended day cells
+  // (see the Holiday Suspension column) can be filled in as 'S' rather than left blank on import.
+  let weekMonIso = null;
+  if (bestDate) {
+    const mon = new Date(bestDate);
+    mon.setDate(mon.getDate() - 4);
+    weekMonIso = localIso(mon);
+  }
+  return { blockOffset: bestBlock * 25, baseOffset, weekMonIso };
 }
 
 function normaliseDay(v) {
@@ -2972,8 +2982,11 @@ function parseSpreadsheetFile(file) {
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
           if (rows.length < 4) continue;
 
-          const { blockOffset, baseOffset } = findLatestBlock(rows);
+          const { blockOffset, baseOffset, weekMonIso } = findLatestBlock(rows);
           const COL = buildColMap(blockOffset, baseOffset);
+          const weekDayIsos = weekMonIso
+            ? ['mon', 'tue', 'wed', 'thu', 'fri'].map((_, i) => isoAddDays(weekMonIso, i))
+            : null;
           let sheetStudentCount = 0;
 
           // Sections below the main active-student table (WAITLIST, Invoice sent, Quote sent) use the
@@ -3049,6 +3062,20 @@ function parseSpreadsheetFile(file) {
               invoiceNote: '',
               _sheet: sheetName,
             };
+            // A blank day cell during this student's holiday suspension period means "gone that day"
+            // in the source spreadsheet (shown there via a tan/brown cell fill, which we can't read from
+            // the file) — fill those in as 'S' rather than leaving them blank, so the app matches the
+            // spreadsheet exactly instead of only inferring suspension via the live week-view overlay.
+            if (student.holidaySuspension && weekDayIsos) {
+              const parsedHs = parseHolidaySuspensionNote(student.holidaySuspension);
+              if (parsedHs) {
+                ['mon', 'tue', 'wed', 'thu', 'fri'].forEach((day, i) => {
+                  if (!student[day] && parsedHs.ranges.some(r => r.start <= weekDayIsos[i] && r.end >= weekDayIsos[i])) {
+                    student[day] = 'S';
+                  }
+                });
+              }
+            }
             if (!student.dob) result.warnings.push(`"${student.name}" (${sheetName}): no date of birth`);
             result.students.push(student);
             sheetStudentCount++;
