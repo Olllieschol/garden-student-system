@@ -2437,6 +2437,7 @@ function MoveClassSection({ student, onUpdate }) {
 // ============================================================
 
 function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }) {
+  const { classes } = useClasses();
   const [confirmArchive, setConfirmArchive] = useState(false);
   React.useEffect(() => { setConfirmArchive(false); }, [student?.id]);
   if (!student) return null;
@@ -2460,6 +2461,17 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
               {status.label}
             </span>
             <span className="text-xs font-mono" style={{ color: 'var(--ink-faint)' }}>{ageFromDob(student.dob)} · {shortDate(student.dob)}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Class:</span>
+            <select
+              value={student.classId || ''}
+              onChange={e => u({ classId: e.target.value || null })}
+              className="text-xs font-medium border rounded px-1.5 py-0.5"
+              style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
+              <option value="">— none —</option>
+              {classes.map(c => <option key={c.id} value={c.id}>{c.fullName}</option>)}
+            </select>
           </div>
         </div>
         <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded shrink-0"><X size={16} /></button>
@@ -2993,6 +3005,19 @@ function isSuspensionFill(cellStyle) {
   return cellStyle?.patternType === 'solid' && cellStyle.fgColor?.rgb?.toUpperCase() === 'FCE5CD';
 }
 
+// The source spreadsheet also colours the "Child Name" cell itself to mark gender — pink
+// ("FFCCFF") for girls, blue ("99CCFF") for boys — confirmed consistent across every class
+// sheet. This is far more reliable than guessing from a static first-name list, so it's used
+// as the primary signal at import time; the name-list guess is kept only as a fallback for
+// names whose cell fill isn't one of these two known colours.
+function genderFromFill(cellStyle) {
+  if (cellStyle?.patternType !== 'solid') return null;
+  const rgb = cellStyle.fgColor?.rgb?.toUpperCase();
+  if (rgb === 'FFCCFF') return 'F';
+  if (rgb === '99CCFF') return 'M';
+  return null;
+}
+
 function parseSpreadsheetFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -3073,9 +3098,10 @@ function parseSpreadsheetFile(file) {
               continue;
             }
 
+            const nameAddr = XLSX.utils.encode_cell({ r: ri, c: COL.name });
             const student = {
               name: childName,
-              gender: guessGenderFromName(childName),
+              gender: genderFromFill(sheet[nameAddr]?.s) || guessGenderFromName(childName),
               classId: finalClassId,
               status: section,
               dob: excelDateToISO(row[COL.dob]),
