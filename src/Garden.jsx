@@ -1001,8 +1001,11 @@ function GardenApp({ initialCentre = 'canggu' }) {
   }, [todayIso, dbLoading]);
 
   // Own-class students + incoming students (pending transitions into this class)
-  // Exclude left/cancelled and students whose Last Day has already passed — those belong in All Students → Left only
-  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (!s.lastDate || s.lastDate >= todayIso));
+  // Exclude left/cancelled and students whose Last Day has already passed — those belong in All Students → Left only.
+  // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so an imported "Last Date" for them
+  // isn't a meaningful "already left" signal — filtering them out by it wrongly hid a small number of waitlist
+  // students (present correctly in Inquiries, which doesn't apply this filter) from their own class page.
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status) || !s.lastDate || s.lastDate >= todayIso));
   const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
   const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
 
@@ -2438,6 +2441,22 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
       </div>
       <div className="flex-1 overflow-y-auto px-5 pb-5">
         <Section title="Contact">
+          <div className="flex items-center gap-2 py-1 text-sm">
+            <UserIcon size={12} className="shrink-0" style={{ color: 'var(--ink-faint)' }} />
+            <span style={{ color: 'var(--ink-faint)' }}>Gender:</span>
+            <div className="flex gap-1">
+              {['F', 'M', 'X'].map(g => (
+                <button
+                  key={g}
+                  onClick={() => u({ gender: g })}
+                  className={`px-2 py-0.5 rounded-full text-xs border flex items-center gap-1 transition ${student.gender === g ? 'font-semibold' : 'opacity-50 hover:opacity-100'}`}
+                  style={{ borderColor: 'var(--line)' }}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: GENDER[g].colour }} />
+                  {GENDER[g].label}
+                </button>
+              ))}
+            </div>
+          </div>
           <EditableRow icon={UserIcon} label="Parents" value={student.parents} onSave={v => u({ parents: v })} />
           <EditableRow icon={Mail} label="Email" value={student.email} onSave={v => u({ email: v })} multiline />
           <EditableRow icon={Phone} label="Phone" value={student.phone} onSave={v => u({ phone: v })} multiline />
