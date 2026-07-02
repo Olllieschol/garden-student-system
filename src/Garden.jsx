@@ -1239,6 +1239,18 @@ function GardenApp({ initialCentre = 'canggu' }) {
 
   const updateStudent = (id, patch) => {
     const current = students.find(s => s.id === id);
+    // Pipeline students (inquiry/quote_sent/invoice_sent/wait_list) often carry a stale
+    // imported "Last Date" that has no real meaning until they've actually started. Every
+    // status-changing code path (Inquiries "Enrolled" button, class-table status dropdown,
+    // Move Class panel, etc.) funnels through here, so clearing it centrally — rather than
+    // relying on each caller to remember — guarantees a newly-enrolled/wait-listed student
+    // never silently vanishes from ownStudents/isStudentActive due to a leftover past date.
+    if (current && patch.status && patch.status !== current.status
+        && ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list'].includes(current.status)
+        && ['enrolled', 'suspended'].includes(patch.status)
+        && patch.lastDate === undefined) {
+      patch = { ...patch, lastDate: '' };
+    }
     if (current) {
       const before = {};
       Object.keys(patch).forEach(k => { before[k] = current[k]; });
