@@ -540,20 +540,39 @@ function parseHolidaySuspensionNote(note) {
 
 // Run note migration on a student array. Returns { students, migrationLog }
 // Also deduplicates existing suspension chips on every student (not just those with HS in notes).
+//
+// Suspensions parsed out of an imported note are tagged `fromImport: true`. Whenever this
+// function runs against a student whose note *currently* contains fresh HS text (i.e. right
+// after a spreadsheet import re-populates the note — see the `Holiday Suspension:` append in
+// parseSpreadsheetFile), it REPLACES that student's fromImport-tagged entries with the new
+// parse rather than appending to them. This makes repeated imports idempotent/self-correcting
+// instead of silently accumulating stale or duplicate date ranges over time — that accumulation
+// was the root cause of students showing extra/wrong-year suspension entries that no longer
+// matched the source spreadsheet.
+//
+// Note that the note field is *always* stripped of HS text once parsed, by design — so on every
+// routine app load (not a fresh import) `shouldParse` will be false for already-migrated
+// students. That's expected and must NOT be treated as "the suspension no longer applies";
+// only an actual re-parse (fresh HS text present) should ever replace fromImport entries.
+// Suspensions without the tag are assumed to be added by hand via the app UI and are always
+// preserved untouched.
 function migrateHolidaySuspensionNotes(students) {
   const migrationLog = [];
   const updated = students.map(s => {
     const note = s.note || '';
-
-    // ── Step 1: always deduplicate existing suspension chips ──
     const rawSusp = s.suspensions || [];
-    const dedupedExisting = rawSusp.filter((item, idx, arr) =>
+
+    // ── Step 1: split into manually-added (untagged) vs previously-imported (tagged) chips ──
+    const manual = rawSusp.filter(x => !x.fromImport);
+    const dedupedManual = manual.filter((item, idx, arr) =>
       idx === arr.findIndex(x => x.start === item.start && x.end === item.end)
     );
-    const dupesRemoved = rawSusp.length - dedupedExisting.length;
-    if (dupesRemoved > 0) {
-      migrationLog.push({ name: s.name, status: 'deduped', removed: dupesRemoved });
-    }
+    const priorImport = rawSusp.filter(x => x.fromImport);
+    const dedupedPriorImport = priorImport.filter((item, idx, arr) =>
+      idx === arr.findIndex(x => x.start === item.start && x.end === item.end)
+    );
+    const baseline = [...dedupedManual, ...dedupedPriorImport];
+    const dedupChanged = baseline.length !== rawSusp.length;
 
     // ── Step 2: parse note if it contains HS text OR a leftover date-range pattern ──
     // Broadened trigger catches partial migrations (note cleaned of HS keywords but
@@ -564,23 +583,26 @@ function migrateHolidaySuspensionNotes(students) {
     const shouldParse = hasHsKeyword || hasDateRange;
 
     if (!shouldParse) {
-      return dupesRemoved > 0 ? { ...s, suspensions: dedupedExisting } : s;
+      // Nothing fresh to reconcile against — leave existing suspensions (manual + prior
+      // import) exactly as they are; only apply dedup if that changed anything.
+      return dedupChanged ? { ...s, suspensions: baseline } : s;
     }
 
     const result = parseHolidaySuspensionNote(note);
     if (!result) {
       migrationLog.push({ name: s.name, note, status: 'unparsed' });
-      return dupesRemoved > 0 ? { ...s, suspensions: dedupedExisting } : s;
+      return dedupChanged ? { ...s, suspensions: baseline } : s;
     }
 
-    // Merge: deduplicate within new ranges AND against already-existing chips
-    const uniqueNew = result.ranges.filter((nr, idx, arr) =>
-      arr.findIndex(x => x.start === nr.start && x.end === nr.end) === idx && // dedup within new
-      !dedupedExisting.some(e => e.start === nr.start && e.end === nr.end)    // dedup vs existing
-    );
+    // Fresh parse of the current note, deduplicated against itself and against manual chips —
+    // this REPLACES dedupedPriorImport rather than appending to it.
+    const freshImport = result.ranges
+      .filter((nr, idx, arr) => arr.findIndex(x => x.start === nr.start && x.end === nr.end) === idx)
+      .filter(nr => !dedupedManual.some(e => e.start === nr.start && e.end === nr.end))
+      .map(r => ({ ...r, fromImport: true }));
 
-    migrationLog.push({ name: s.name, note, status: 'migrated', ranges: uniqueNew, remaining: result.remainingNote, dupesRemoved });
-    return { ...s, suspensions: [...dedupedExisting, ...uniqueNew], note: result.remainingNote };
+    migrationLog.push({ name: s.name, note, status: 'migrated', ranges: freshImport, remaining: result.remainingNote });
+    return { ...s, suspensions: [...dedupedManual, ...freshImport], note: result.remainingNote };
   });
   return { students: updated, migrationLog };
 }
