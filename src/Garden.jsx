@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from './supabase.js';
-import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2 } from 'lucide-react';
+import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2, Undo2, Redo2 } from 'lucide-react';
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');`;
 
@@ -909,6 +909,14 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const [showLeft, setShowLeft] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Undo/redo history — in-memory only (never persisted to localStorage/sessionStorage), so
+  // it's always empty on a fresh page load and scoped to this tab's own session, same as
+  // Google Docs. See applyHistoryEntry below for how this stays safe against another admin
+  // editing the same shared (Supabase-backed) data at the same time.
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const MAX_HISTORY = 100;
+
   const CENTRE_PASSWORDS = { canggu: 'canggu2024', sanur: 'sanur2024' };
 
   const handleCentreSwitch = (c) => {
@@ -1058,21 +1066,143 @@ function GardenApp({ initialCentre = 'canggu' }) {
   // Close detail panel whenever class or page changes
   useEffect(() => { setSelectedStudentId(null); }, [currentClassId, view]);
 
-  // Class CRUD
-  const addClass = (cls) => {
-    const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
-    const newCls = { ...cls, id, fullName: cls.fullName || cls.name };
-    setClasses(prev => sortClasses([...prev, newCls]));
-    syncClassToDb(newCls);
-    showToast(`Added class "${cls.name}"`);
+  // ---- Raw student/class mutators — state + Supabase sync only, no history recording.
+  // updateStudent/addStudent/addClass/etc. below wrap these with a pushHistory() call each,
+  // so every distinct user action (one field commit, one add, one delete) becomes exactly one
+  // undo step — undo/redo themselves call these raw versions directly so that undoing an
+  // action doesn't itself get recorded as a new undoable action.
+  const applyStudentPatchRaw = (id, patch) => {
+    setStudents(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, ...patch } : s);
+      const merged = next.find(s => s.id === id);
+      if (merged) syncStudentToDb(merged);
+      return next;
+    });
   };
-  const updateClass = (id, patch) => {
+  const insertStudentRaw = (snapshot) => {
+    setStudents(prev => prev.some(s => s.id === snapshot.id) ? prev : [...prev, snapshot]);
+    syncStudentToDb(snapshot);
+  };
+  const removeStudentRaw = (id) => {
+    setStudents(prev => prev.filter(s => s.id !== id));
+    if (supabase) supabase.from('students').delete().eq('id', String(id));
+  };
+  const applyClassPatchRaw = (id, patch) => {
     setClasses(prev => {
       const next = prev.map(c => c.id === id ? { ...c, ...patch } : c);
       const merged = next.find(c => c.id === id);
       if (merged) syncClassToDb(merged);
       return next;
     });
+  };
+  const insertClassRaw = (snapshot) => {
+    setClasses(prev => sortClasses(prev.some(c => c.id === snapshot.id) ? prev : [...prev, snapshot]));
+    syncClassToDb(snapshot);
+  };
+  const removeClassRaw = (id) => {
+    setClasses(prev => prev.filter(c => c.id !== id));
+    if (supabase) supabase.from('classes').delete().eq('id', id);
+  };
+
+  // ---- Undo/redo history ----
+  const pushHistory = (entry) => {
+    setUndoStack(prev => {
+      const next = [...prev, entry];
+      return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    });
+    setRedoStack([]);
+  };
+
+  // Applies one history entry in the given direction ('undo' or 'redo'). For field-level
+  // 'update' entries this only touches the exact fields that action changed — never the whole
+  // row — and first checks each field's *current* live value still matches what this action
+  // last set it to. If another admin has changed that same field since (via the realtime
+  // shared DB), that field is skipped rather than overwritten, so undo can't clobber someone
+  // else's newer edit; only fields untouched since this action get reverted/reapplied.
+  const applyHistoryEntry = (entry, direction) => {
+    const target = direction === 'undo' ? entry.before : entry.after;
+    const expected = direction === 'undo' ? entry.after : entry.before;
+    const list = entry.table === 'student' ? students : classes;
+    const applyPatchRaw = entry.table === 'student' ? applyStudentPatchRaw : applyClassPatchRaw;
+    const insertRaw = entry.table === 'student' ? insertStudentRaw : insertClassRaw;
+    const removeRaw = entry.table === 'student' ? removeStudentRaw : removeClassRaw;
+
+    if (entry.type === 'update') {
+      const current = list.find(x => x.id === entry.id);
+      if (!current) return { recordMissing: true };
+      const patch = {};
+      let skippedCount = 0;
+      Object.keys(target).forEach(k => {
+        if (current[k] === expected[k]) patch[k] = target[k];
+        else skippedCount++;
+      });
+      if (Object.keys(patch).length > 0) applyPatchRaw(entry.id, patch);
+      return { skippedCount };
+    }
+    if (entry.type === 'add') {
+      if (direction === 'undo') removeRaw(entry.id); else insertRaw(entry.snapshot);
+      return {};
+    }
+    if (entry.type === 'delete') {
+      if (direction === 'undo') insertRaw(entry.snapshot); else removeRaw(entry.id);
+      return {};
+    }
+    return {};
+  };
+
+  const undo = () => {
+    if (undoStack.length === 0) return;
+    const entry = undoStack[undoStack.length - 1];
+    const result = applyHistoryEntry(entry, 'undo') || {};
+    setUndoStack(s => s.slice(0, -1));
+    setRedoStack(s => [...s, entry]);
+    if (result.recordMissing) showToast('Undo skipped — that record no longer exists');
+    else if (result.skippedCount) showToast(`Undo: ${result.skippedCount} field${result.skippedCount > 1 ? 's' : ''} skipped — changed by someone else since`);
+  };
+  const redo = () => {
+    if (redoStack.length === 0) return;
+    const entry = redoStack[redoStack.length - 1];
+    const result = applyHistoryEntry(entry, 'redo') || {};
+    setRedoStack(s => s.slice(0, -1));
+    setUndoStack(s => [...s, entry]);
+    if (result.recordMissing) showToast('Redo skipped — that record no longer exists');
+    else if (result.skippedCount) showToast(`Redo: ${result.skippedCount} field${result.skippedCount > 1 ? 's' : ''} skipped — changed by someone else since`);
+  };
+
+  // Keyboard shortcuts — Cmd/Ctrl+Z to undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y to redo. Skipped
+  // while a text input/textarea is actively focused so native in-field text undo still works.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+      if (key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+      else if (key === 'z') { e.preventDefault(); undo(); }
+      else if (key === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undoStack, redoStack, students, classes]);
+
+  // Class CRUD
+  const addClass = (cls) => {
+    const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
+    const newCls = { ...cls, id, fullName: cls.fullName || cls.name };
+    pushHistory({ table: 'class', type: 'add', id, snapshot: newCls });
+    insertClassRaw(newCls);
+    showToast(`Added class "${cls.name}"`);
+  };
+  const updateClass = (id, patch) => {
+    const current = classes.find(c => c.id === id);
+    if (current) {
+      const before = {};
+      Object.keys(patch).forEach(k => { before[k] = current[k]; });
+      pushHistory({ table: 'class', type: 'update', id, before, after: { ...patch } });
+    }
+    applyClassPatchRaw(id, patch);
   };
   const deleteClass = (id) => {
     const c = classes.find(x => x.id === id);
@@ -1081,10 +1211,10 @@ function GardenApp({ initialCentre = 'canggu' }) {
       showToast(`Can't delete "${c?.name}" — ${studentsInClass.length} active students. Move or archive them first.`);
       return;
     }
-    setClasses(prev => prev.filter(x => x.id !== id));
+    if (c) pushHistory({ table: 'class', type: 'delete', id, snapshot: c });
+    removeClassRaw(id);
     if (currentClassId === id) setCurrentClassId(classes[0]?.id);
     showToast(`Removed class "${c?.name}"`);
-    if (supabase) supabase.from('classes').delete().eq('id', id);
   };
 
   // Add student manually
@@ -1102,18 +1232,19 @@ function GardenApp({ initialCentre = 'canggu' }) {
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
       invoiceStatus: 'not_sent', invoiceNote: '', prepay: null, siblings: [],
     };
-    setStudents(prev => [...prev, newStudent]);
-    syncStudentToDb(newStudent);
+    pushHistory({ table: 'student', type: 'add', id: newId, snapshot: newStudent });
+    insertStudentRaw(newStudent);
     showToast(`Added ${data.name}`);
   };
 
   const updateStudent = (id, patch) => {
-    setStudents(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, ...patch } : s);
-      const merged = next.find(s => s.id === id);
-      if (merged) syncStudentToDb(merged);
-      return next;
-    });
+    const current = students.find(s => s.id === id);
+    if (current) {
+      const before = {};
+      Object.keys(patch).forEach(k => { before[k] = current[k]; });
+      pushHistory({ table: 'student', type: 'update', id, before, after: { ...patch } });
+    }
+    applyStudentPatchRaw(id, patch);
   };
 
   const handleExportAll = () => {
@@ -1134,8 +1265,8 @@ function GardenApp({ initialCentre = 'canggu' }) {
   };
   const permanentDelete = (id) => {
     const s = students.find(x => x.id === id);
-    setStudents(p => p.filter(x => x.id !== id));
-    if (supabase) supabase.from('students').delete().eq('id', String(id));
+    if (s) pushHistory({ table: 'student', type: 'delete', id, snapshot: s });
+    removeStudentRaw(id);
     setSelectedStudentId(null);
     showToast(`${s?.name} permanently deleted`);
   };
@@ -1232,8 +1363,8 @@ function GardenApp({ initialCentre = 'canggu' }) {
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
       invoiceStatus: 'not_sent', invoiceNote: '', prepay: null,
     };
-    setStudents(prev => [...prev, newStudent]);
-    syncStudentToDb(newStudent);
+    pushHistory({ table: 'student', type: 'add', id: newId, snapshot: newStudent });
+    insertStudentRaw(newStudent);
     setEmailModalOpen(false);
     showToast(`Added ${p.childName || 'new inquiry'} to the pipeline`);
   };
@@ -1504,6 +1635,23 @@ function GardenApp({ initialCentre = 'canggu' }) {
             <Check size={14} /> {toast}
           </div>
         )}
+
+        <div className="fixed bottom-6 left-6 flex items-center gap-1 p-1 rounded-lg shadow-lg" style={{ background: 'var(--paper)', border: '1px solid var(--line)' }}>
+          <button
+            onClick={undo}
+            disabled={undoStack.length === 0}
+            title="Undo (Cmd+Z)"
+            className="p-2 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
+            <Undo2 size={16} />
+          </button>
+          <button
+            onClick={redo}
+            disabled={redoStack.length === 0}
+            title="Redo (Cmd+Shift+Z)"
+            className="p-2 rounded-md transition disabled:opacity-30 disabled:cursor-not-allowed hover:bg-stone-100">
+            <Redo2 size={16} />
+          </button>
+        </div>
       </div>
     </ClassesContext.Provider>
   );
