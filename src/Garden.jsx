@@ -3133,57 +3133,89 @@ const SHEET_CLASS_MAP = {
 };
 const SKIP_SHEETS = ['age calculator', 'total enrolment', 'enrolment forecast', '25+ enrolments'];
 
-function buildColMap(blockOffset, baseOffset) {
-  const o = blockOffset + baseOffset;
-  // Verified against the real workbook's raw cells column-by-column: there's a "Social Media"
-  // column between Parents Name and Phone that this map previously had no slot for, which shifted
-  // every field after it by one — `email` was reading Social Media, `lengthOfStay` was reading the
-  // real Email column, `bondPaid` was reading Length-of-stay TEXT (not a date), `periodFrom` was
-  // reading the real Bond-paid date, `periodUntil` was reading the real Period-From date, and the
-  // real Period-Until column (the actual withdrawal date on the far right) was never read at all.
-  // `no` also previously ignored baseOffset entirely (`blockOffset + 0`), pointing at a blank column.
+function normHeader(s) { return String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+// Canggu's and Sanur's real workbooks are NOT laid out identically: Canggu's occupancy blocks are
+// 25 columns wide with no "Social Media" column and Email immediately after Parents Name, while
+// Sanur's are 26 columns wide with a Social Media column and Email placed after Holiday
+// Suspension. A single hardcoded column-offset formula can only match one centre's layout — the
+// previous version was tuned against Sanur's file and silently misaligned every field for Canggu,
+// which inflated a real ~155-student June roster into 423 bogus rows (misread garbage columns
+// counted as extra "students"). Instead, each field's actual column is found by matching its real
+// header label text within the block's own column range, so the map is correct for either layout.
+function buildColMapForBlock(rows, blockStart, blockEnd) {
+  const row0 = rows[0] || [];
+  const row2 = rows[2] || [];
+  const find = (row, pred) => {
+    for (let c = blockStart; c < blockEnd; c++) { if (pred(normHeader(row[c]))) return c; }
+    return -1;
+  };
+  const fallback = (c, def) => c >= 0 ? c : def;
   return {
-    no: 0 + o, name: 1 + o, originalStart: 2 + o, returningDate: 3 + o, lastDate: 4 + o,
-    dob: 5 + o, currentAge: 6 + o, mon: 7 + o, tue: 8 + o, wed: 9 + o, thu: 10 + o, fri: 11 + o,
-    lunch: 12 + o, nationality: 13 + o, parents: 14 + o, socialMedia: 15 + o, phone: 16 + o,
-    note: 17 + o, holidaySuspension: 18 + o, email: 19 + o, lengthOfStay: 20 + o, bondPaid: 21 + o,
-    periodFrom: 22 + o, periodUntil: 23 + o,
+    no: fallback(find(row2, v => v === 'no'), blockStart),
+    name: fallback(find(row2, v => v === 'child name'), blockStart + 1),
+    originalStart: fallback(find(row2, v => v.includes('original start')), blockStart + 2),
+    returningDate: fallback(find(row2, v => v.includes('returning date')), blockStart + 3),
+    lastDate: fallback(find(row2, v => v.includes('last date')), blockStart + 4),
+    dob: fallback(find(row2, v => v === 'dob'), blockStart + 5),
+    currentAge: fallback(find(row2, v => v.includes('current age')), blockStart + 6),
+    mon: fallback(find(row2, v => v === 'mon'), blockStart + 7),
+    tue: fallback(find(row2, v => v === 'tue'), blockStart + 8),
+    wed: fallback(find(row2, v => v === 'wed'), blockStart + 9),
+    thu: fallback(find(row2, v => v === 'thu'), blockStart + 10),
+    fri: fallback(find(row2, v => v === 'fri'), blockStart + 11),
+    lunch: fallback(find(row0, v => v === 'lunch'), blockStart + 12),
+    nationality: fallback(find(row0, v => v === 'nationality'), blockStart + 13),
+    parents: fallback(find(row0, v => v.includes('parents name')), blockStart + 14),
+    phone: fallback(find(row0, v => v.includes('phone')), blockStart + 15),
+    note: fallback(find(row0, v => v === 'note'), blockStart + 16),
+    holidaySuspension: fallback(find(row0, v => v.includes('holiday suspension')), blockStart + 17),
+    email: fallback(find(row0, v => v === 'email'), blockStart + 18),
+    lengthOfStay: fallback(find(row0, v => v.includes('length of stay')), blockStart + 19),
+    bondPaid: fallback(find(row0, v => v.includes('bond') && v.includes('deposit')), blockStart + 20),
+    periodFrom: fallback(find(row2, v => v === 'from'), blockStart + 21),
+    periodUntil: fallback(find(row2, v => v === 'until'), blockStart + 22),
   };
 }
 
-function findLatestBlock(rows) {
-  const row2 = rows[2] || [];
-  let baseOffset = 0;
-  for (let i = 0; i < Math.min(row2.length, 5); i++) {
-    if (String(row2[i] || '').trim().toLowerCase().includes('child name')) { baseOffset = i - 1; break; }
+// Every side-by-side occupancy-period block starts at whatever column row1 has "OCCUPANCY
+// PERIOD:" — confirmed this is always the exact same column as that block's "No" (row2) and
+// class-name (row0) cells, so block boundaries can be found directly by scanning row1 rather than
+// assumed from a fixed width that differs between centres.
+function findOccupancyBlockStarts(rows) {
+  const row1 = rows[1] || [];
+  const starts = [];
+  for (let c = 0; c < row1.length; c++) {
+    if (normHeader(row1[c]).startsWith('occupancy period')) starts.push(c);
   }
-  if (baseOffset < 0) baseOffset = 0;
+  return starts;
+}
 
+function findLatestBlock(rows) {
   const MONTHS = { january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11,jan:0,feb:1,mar:2,apr:3,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
-  // Each occupancy-period block is 26 columns wide (verified against real exported workbooks —
-  // the block includes a "Social Media" column alongside Phone/Email that earlier analysis missed).
-  // Using the wrong width here doesn't break block 0 (offset 0 either way), but for any later block
-  // — i.e. whenever the most recent occupancy period isn't the first one in the sheet, which is the
-  // common case — it silently misaligns every column, making DOB/date cells read as the child's name.
-  const BLOCK_WIDTH = 26;
-  const blocks = [];
-  for (let block = 0; block < 5; block++) {
-    const offset = block * BLOCK_WIDTH;
+  const starts = findOccupancyBlockStarts(rows);
+  if (starts.length === 0) {
+    // No recognisable block headers at all — fall back to a single block starting at column 1
+    // (the common case when a sheet has no side-by-side blocks) rather than an empty column map.
+    return { COL: buildColMapForBlock(rows, 1, 31), weekMonIso: null };
+  }
+  const row1 = rows[1] || [];
+  const blocks = starts.map((start, i) => {
+    const end = i + 1 < starts.length ? starts[i + 1] : start + 31;
     let period = '';
-    for (let c = offset; c < offset + 15; c++) {
-      const v = String(rows[1]?.[c] || '').trim();
+    for (let c = start; c < end; c++) {
+      const v = String(row1[c] || '').trim();
       if (v && /\d/.test(v) && /[a-zA-Z]/.test(v) && !v.toLowerCase().startsWith('occupancy')) { period = v; break; }
     }
-    if (!period) continue;
+    let fri = null;
     const endMatch = period.match(/(\d{1,2})\s+(\w+)\s+(\d{4})\s*$/);
     if (endMatch) {
       const mon = MONTHS[endMatch[2].toLowerCase()];
-      if (mon !== undefined) {
-        const fri = new Date(parseInt(endMatch[3]), mon, parseInt(endMatch[1]));
-        blocks.push({ block, fri });
-      }
+      if (mon !== undefined) fri = new Date(parseInt(endMatch[3]), mon, parseInt(endMatch[1]));
     }
-  }
+    return { start, end, fri };
+  });
+
   // Real workbooks are exported several weeks ahead of time (e.g. today's block plus 4 upcoming
   // weeks side by side), so simply picking whichever block has the LATEST date always grabs the
   // furthest-future week instead of the one that's actually relevant right now — importing next
@@ -3191,30 +3223,31 @@ function findLatestBlock(rows) {
   // range contains today; if none does (file only covers future or only past weeks), fall back to
   // the nearest upcoming block, and only fall back to the most recent past block if every block
   // in the file is already over.
-  let bestBlock = 0, bestDate = null;
-  if (blocks.length > 0) {
+  const dated = blocks.filter(b => b.fri);
+  let chosen = blocks[0];
+  if (dated.length > 0) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     let containing = null, nearestFuture = null, mostRecentPast = null;
-    for (const b of blocks) {
+    for (const b of dated) {
       const mon = new Date(b.fri); mon.setDate(mon.getDate() - 4);
       if (mon <= today && today <= b.fri) { containing = b; break; }
       if (b.fri >= today && (!nearestFuture || b.fri < nearestFuture.fri)) nearestFuture = b;
       if (b.fri < today && (!mostRecentPast || b.fri > mostRecentPast.fri)) mostRecentPast = b;
     }
-    const chosen = containing || nearestFuture || mostRecentPast;
-    bestBlock = chosen.block; bestDate = chosen.fri;
+    chosen = containing || nearestFuture || mostRecentPast;
   }
   // The occupancy period always spans a single Mon–Fri working week, and the matched date above is
   // its Friday (the last "d Month yyyy" token in the period text) — so Monday is just 4 days earlier.
   // Used to figure out each weekday column's real calendar date, so blank-but-suspended day cells
   // (see the Holiday Suspension column) can be filled in as 'S' rather than left blank on import.
   let weekMonIso = null;
-  if (bestDate) {
-    const mon = new Date(bestDate);
+  if (chosen.fri) {
+    const mon = new Date(chosen.fri);
     mon.setDate(mon.getDate() - 4);
     weekMonIso = localIso(mon);
   }
-  return { blockOffset: bestBlock * BLOCK_WIDTH, baseOffset, weekMonIso };
+  const COL = buildColMapForBlock(rows, chosen.start, chosen.end);
+  return { COL, weekMonIso };
 }
 
 function normaliseDay(v) {
@@ -3326,8 +3359,7 @@ function parseSpreadsheetFile(file, centre) {
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
           if (rows.length < 4) continue;
 
-          const { blockOffset, baseOffset, weekMonIso } = findLatestBlock(rows);
-          const COL = buildColMap(blockOffset, baseOffset);
+          const { COL, weekMonIso } = findLatestBlock(rows);
           const weekDayIsos = weekMonIso
             ? ['mon', 'tue', 'wed', 'thu', 'fri'].map((_, i) => isoAddDays(weekMonIso, i))
             : null;
