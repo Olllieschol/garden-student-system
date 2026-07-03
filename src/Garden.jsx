@@ -21,12 +21,21 @@ function localIso(d) {
 // CONSTANTS
 // ============================================================
 
+// el1/jrk/kg carry no `centre` — both centres have one plain room for each, so they're shown
+// everywhere. Canggu splits EL 2 and PK into two named sub-rooms each (its real workbook has
+// separate "EL2 Daf"/"EL2 Hib" and "PK Saf"/"PK Lav" sheets); Sanur's real workbook has no such
+// split — just one combined "EL 2" sheet and one combined "PK" sheet — so Sanur gets its own
+// combined 'el2'/'pk' class ids instead of the Canggu-only split ones. Without this, Sanur's
+// sidebar showed all 7 Canggu-style rooms and every EL2/PK import silently piled everyone into
+// Daffodil/Saffron while Hibiscus/Lavender sat permanently empty.
 const INITIAL_CLASSES = [
   { id: 'el1',  name: 'EL 1',            fullName: 'Early Learners 1',            age: '1–2 yrs',   capacity: 16, dot: '#FBBF24' },
-  { id: 'el2d', name: 'EL 2 Daffodil',   fullName: 'Early Learners 2 — Daffodil', age: '2–3 yrs',   capacity: 18, dot: '#FDE68A' },
-  { id: 'el2h', name: 'EL 2 Hibiscus',   fullName: 'Early Learners 2 — Hibiscus', age: '2–3 yrs',   capacity: 18, dot: '#FDA4AF' },
-  { id: 'pks',  name: 'PK Saffron',      fullName: 'Pre-Kindergarten Saffron',    age: '3–4 yrs',   capacity: 20, dot: '#FB923C' },
-  { id: 'pkl',  name: 'PK Lavender',     fullName: 'Pre-Kindergarten Lavender',   age: '3–4 yrs',   capacity: 20, dot: '#C4B5FD' },
+  { id: 'el2d', name: 'EL 2 Daffodil',   fullName: 'Early Learners 2 — Daffodil', age: '2–3 yrs',   capacity: 18, dot: '#FDE68A', centre: 'canggu' },
+  { id: 'el2h', name: 'EL 2 Hibiscus',   fullName: 'Early Learners 2 — Hibiscus', age: '2–3 yrs',   capacity: 18, dot: '#FDA4AF', centre: 'canggu' },
+  { id: 'el2',  name: 'EL 2',            fullName: 'Early Learners 2',            age: '2–3 yrs',   capacity: 36, dot: '#FDE68A', centre: 'sanur' },
+  { id: 'pks',  name: 'PK Saffron',      fullName: 'Pre-Kindergarten Saffron',    age: '3–4 yrs',   capacity: 20, dot: '#FB923C', centre: 'canggu' },
+  { id: 'pkl',  name: 'PK Lavender',     fullName: 'Pre-Kindergarten Lavender',   age: '3–4 yrs',   capacity: 20, dot: '#C4B5FD', centre: 'canggu' },
+  { id: 'pk',   name: 'PK',              fullName: 'Pre-Kindergarten',            age: '3–4 yrs',   capacity: 40, dot: '#FB923C', centre: 'sanur' },
   { id: 'jrk',  name: 'Jr Kindergarten', fullName: 'Junior Kindergarten',         age: '4–5 yrs',   capacity: 22, dot: '#6EE7B7' },
   { id: 'kg',   name: 'Kindergarten',    fullName: 'Kindergarten',                age: '5–6.5 yrs', capacity: 25, dot: '#7DD3FC' },
 ];
@@ -662,15 +671,22 @@ function titleCaseIfNeeded(s) {
   }).join(' ');
 }
 
-function guessClassFromText(s) {
+// `centre` disambiguates the generic "EL 2" / "PK" guesses: Canggu splits those into two named
+// sub-rooms (Daffodil/Hibiscus, Saffron/Lavender) with their own distinctly-named sheets that are
+// caught by the 'hib'/'saf'/'lav' branches below and never reach the generic branch. Sanur's real
+// workbook has no such split — just one combined "EL 2" sheet and one combined "PK" sheet — so for
+// Sanur the generic branch must resolve to Sanur's own combined class ids ('el2'/'pk'), not silently
+// dump everyone into Canggu's Daffodil/Saffron rooms (which is what caused Sanur's per-class counts
+// to look wrong — Hibiscus/Lavender always empty, Daffodil/Saffron holding both real sub-groups).
+function guessClassFromText(s, centre) {
   if (!s) return null;
   const l = s.toLowerCase();
   if (l.includes('el 1') || l.includes('el1') || (l.includes('1-2') && !l.includes('2-3'))) return 'el1';
   if (l.includes('el2 hib') || l.includes('el2h') || l.includes('hibiscus')) return 'el2h';
-  if (l.includes('el 2') || l.includes('el2') || l.includes('daffodil') || l.includes('2-3')) return 'el2d';
   if (l.includes('pk saf') || l.includes('saffron')) return 'pks';
   if (l.includes('pk lav') || l.includes('lavender')) return 'pkl';
-  if (l.includes('pre k') || l.includes('pre-k') || l.includes('pk')) return 'pks';
+  if (l.includes('el 2') || l.includes('el2') || l.includes('daffodil') || l.includes('2-3')) return centre === 'sanur' ? 'el2' : 'el2d';
+  if (l.includes('pre k') || l.includes('pre-k') || l.includes('pk')) return centre === 'sanur' ? 'pk' : 'pks';
   if (l.includes('jr') || l.includes('jun')) return 'jrk';
   if (l.includes('kind')) return 'kg';
   return null;
@@ -918,6 +934,18 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const [centreUnlocked, setCentreUnlocked] = useState({ canggu: initialCentre === 'canggu', sanur: initialCentre === 'sanur' });
   const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
+  // Classes with no `centre` (el1/jrk/kg) are shared by both centres; the rest are centre-specific
+  // (Canggu's split el2d/el2h/pks/pkl vs Sanur's combined el2/pk) — this is the list every
+  // centre-scoped consumer (sidebar, dropdowns, dashboard, import summary) should actually see.
+  const centreClasses = useMemo(() => classes.filter(c => !c.centre || c.centre === centre), [classes, centre]);
+  // Whenever the active centre changes (including on initial load), make sure currentClassId
+  // actually belongs to that centre — otherwise switching to Sanur while still pointed at a
+  // Canggu-only room (e.g. the 'el2d' default) would show a class page for a room Sanur doesn't have.
+  useEffect(() => {
+    if (classes.length === 0) return;
+    if (!centreClasses.some(c => c.id === currentClassId)) setCurrentClassId(centreClasses[0]?.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centre, classes]);
   const [weekIdx, setWeekIdx] = useState(TODAY_WEEK_IDX);
   const [selectedStudentId, setSelectedStudentId] = useState(null);
   const [view, setView] = useState('class');
@@ -1002,11 +1030,37 @@ function GardenApp({ initialCentre = 'canggu' }) {
         dbClasses = INITIAL_CLASSES;
       }
 
+      // One-time migration: tag Canggu's split EL2/PK sub-rooms with centre:'canggu' (older DB
+      // rows predate the `centre` field and would otherwise show in Sanur's sidebar too), and add
+      // Sanur's own combined el2/pk classes if this DB was seeded before they existed.
+      const CANGGU_ONLY_CLASS_IDS = ['el2d', 'el2h', 'pks', 'pkl'];
+      let classesChanged = false;
+      dbClasses = dbClasses.map(c => {
+        if (CANGGU_ONLY_CLASS_IDS.includes(c.id) && c.centre !== 'canggu') { classesChanged = true; return { ...c, centre: 'canggu' }; }
+        return c;
+      });
+      INITIAL_CLASSES.filter(c => c.centre === 'sanur').forEach(sanurClass => {
+        if (!dbClasses.some(c => c.id === sanurClass.id)) { dbClasses.push(sanurClass); classesChanged = true; }
+      });
+      if (classesChanged && supabase) {
+        await supabase.from('classes').upsert(dbClasses.map(c => ({ id: c.id, data: c })));
+      }
+
+      // Any existing Sanur students already assigned to Canggu's split Daffodil/Hibiscus/Saffron/
+      // Lavender ids (from before Sanur had its own combined el2/pk classes) need remapping — left
+      // as-is they'd become invisible the moment those split classes are hidden from Sanur's view.
+      const SANUR_CLASS_REMAP = { el2d: 'el2', el2h: 'el2', pks: 'pk', pkl: 'pk' };
+      let sanurClassIdsChanged = false;
+      dbStudents = dbStudents.map(s => {
+        if (s.centre === 'sanur' && SANUR_CLASS_REMAP[s.classId]) { sanurClassIdsChanged = true; return { ...s, classId: SANUR_CLASS_REMAP[s.classId] }; }
+        return s;
+      });
+
       // Migrate any free-text HS notes into structured suspensions
       const { students: migratedStudents, migrationLog } = migrateHolidaySuspensionNotes(dbStudents);
       const changed = migrationLog.filter(l => l.status === 'migrated' || l.status === 'deduped');
-      if (changed.length > 0 && supabase) {
-        // Persist migrated/deduped students back to DB
+      if ((changed.length > 0 || sanurClassIdsChanged) && supabase) {
+        // Persist migrated/deduped students (and any Sanur classId remap) back to DB
         await supabase.from('students').upsert(migratedStudents.map(s => ({ id: String(s.id), data: s })));
       }
       if (migrationLog.length > 0) {
@@ -1209,7 +1263,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   // Class CRUD
   const addClass = (cls) => {
     const id = cls.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') + '_' + Date.now().toString(36).slice(-4);
-    const newCls = { ...cls, id, fullName: cls.fullName || cls.name };
+    const newCls = { ...cls, id, fullName: cls.fullName || cls.name, centre };
     pushHistory({ table: 'class', type: 'add', id, snapshot: newCls });
     insertClassRaw(newCls);
     showToast(`Added class "${cls.name}"`);
@@ -1232,7 +1286,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
     }
     if (c) pushHistory({ table: 'class', type: 'delete', id, snapshot: c });
     removeClassRaw(id);
-    if (currentClassId === id) setCurrentClassId(classes[0]?.id);
+    if (currentClassId === id) setCurrentClassId(centreClasses[0]?.id);
     showToast(`Removed class "${c?.name}"`);
   };
 
@@ -1410,7 +1464,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   );
 
   return (
-    <ClassesContext.Provider value={{ classes, setClasses, addClass, updateClass, deleteClass }}>
+    <ClassesContext.Provider value={{ classes: centreClasses, setClasses, addClass, updateClass, deleteClass }}>
       <style>{FONT_IMPORT + `
         :root {
           --bg: #FAF6EF;
@@ -1469,7 +1523,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 <span>Classes</span>
                 {classesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               </button>
-              {classesOpen && classes.map(c => {
+              {classesOpen && centreClasses.map(c => {
                 const enrolled = students.filter(s => s.centre === centre && s.classId === c.id && (s.status === 'enrolled' || s.status === 'suspended') && isStudentActive(s)).length;
                 const isActive = view === 'class' && currentClassId === c.id;
                 const overCap = enrolled > c.capacity;
@@ -1608,13 +1662,17 @@ function GardenApp({ initialCentre = 'canggu' }) {
         </div>
 
         {emailModalOpen && <EmailParseModal onClose={() => setEmailModalOpen(false)} onConfirm={handleParsedConfirm} />}
-        {importModalOpen && <ImportModal onClose={() => setImportModalOpen(false)} onConfirm={async (parsed, isBackup) => {
+        {importModalOpen && <ImportModal centre={centre} onClose={() => setImportModalOpen(false)} onConfirm={async (parsed, isBackup) => {
           let newStudents;
           if (isBackup) {
             newStudents = parsed;
           } else {
+            // Sequential ids must start after the highest id already in use across BOTH centres —
+            // starting from 1 here would collide with the other centre's existing student ids
+            // (which is exactly the kind of "numbers getting mixed up" bug this whole fix targets).
+            const nextId = students.length > 0 ? Math.max(...students.map(s => s.id)) + 1 : 1;
             newStudents = parsed.map((s, i) => ({
-              id: i + 1,
+              id: nextId + i,
               name: s.name || 'Unnamed',
               gender: s.gender || 'X',
               centre,
@@ -1645,10 +1703,20 @@ function GardenApp({ initialCentre = 'canggu' }) {
               siblings: [],
             }));
           }
+          // A full backup restore (isBackup) intentionally replaces EVERYTHING — the UI already
+          // discloses this ("will replace ALL current data"). A regular Excel import, though, is
+          // scoped to a single centre's roster and must NEVER touch the other centre's students —
+          // deleting `.neq('id', '__none__')` (matches every row) here was the bug that wiped both
+          // centres' data on any single-centre import.
+          const idsToDelete = isBackup
+            ? students.map(s => String(s.id))
+            : students.filter(s => s.centre === centre).map(s => String(s.id));
           if (supabase) {
             suppressRealtime.current = true;
             try {
-              await supabase.from('students').delete().neq('id', '__none__');
+              if (idsToDelete.length > 0) {
+                await supabase.from('students').delete().in('id', idsToDelete);
+              }
               const rows = newStudents.map(s => ({ id: String(s.id), data: s }));
               for (let i = 0; i < rows.length; i += 100) {
                 await supabase.from('students').upsert(rows.slice(i, i + 100));
@@ -1658,7 +1726,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
               setTimeout(() => { suppressRealtime.current = false; }, 2000);
             }
           }
-          setStudents(newStudents);
+          setStudents(prev => isBackup ? newStudents : [...prev.filter(s => s.centre !== centre), ...newStudents]);
           setImportModalOpen(false);
           showToast(`${isBackup ? 'Restored' : 'Imported'} ${newStudents.length} students`);
         }} />}
@@ -3206,7 +3274,7 @@ function genderFromFill(cellStyle) {
   return null;
 }
 
-function parseSpreadsheetFile(file) {
+function parseSpreadsheetFile(file, centre) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -3223,10 +3291,10 @@ function parseSpreadsheetFile(file) {
           if (SKIP_SHEETS.includes(sheetLower)) continue;
           const classId = SHEET_CLASS_MAP[sheetLower];
           if (!classId) {
-            const guessed = guessClassFromText(sheetName);
+            const guessed = guessClassFromText(sheetName, centre);
             if (!guessed) { result.warnings.push(`Sheet "${sheetName}": not a recognised class — skipped`); continue; }
           }
-          const finalClassId = classId || guessClassFromText(sheetName);
+          const finalClassId = classId || guessClassFromText(sheetName, centre);
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
           if (rows.length < 4) continue;
@@ -3346,7 +3414,7 @@ function parseSpreadsheetFile(file) {
 
 // ---- Import Modal ----
 
-function ImportModal({ onClose, onConfirm }) {
+function ImportModal({ onClose, onConfirm, centre }) {
   const { classes } = useClasses();
   const [step, setStep] = useState('upload');
   const [file, setFile] = useState(null);
@@ -3389,7 +3457,7 @@ function ImportModal({ onClose, onConfirm }) {
         }
       }
       // Excel / other format
-      const result = await parseSpreadsheetFile(f);
+      const result = await parseSpreadsheetFile(f, centre);
       if (result.students.length === 0) {
         setParseError('No student rows found. Make sure this is a Garden enrolment spreadsheet with class sheets like "EL 1", "PK Saf", etc.');
         setParsing(false);
