@@ -628,12 +628,22 @@ function migrateHolidaySuspensionNotes(students) {
   return { students: updated, migrationLog };
 }
 
+// Guards against free-text values landing in date fields (e.g. an imported "Started" or
+// "Last Date" cell reading "Monday 18th", "tbc", "ASAP", "–") being compared as if they were
+// real ISO dates. String comparison on non-ISO text is unpredictable — e.g. "Monday 18th" >
+// any "YYYY-MM-DD" string — and can silently exclude a student from date-filtered views (they
+// just vanish, even though their record is untouched). Every comparison against originalStart/
+// lastDate/transitionDate across the app should go through this guard first.
+function isIsoDate(v) {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
 // Shared active-student predicate used by sidebar, class header, and dashboard.
 // A student counts as active if their Last Day is unset OR is today or later.
 function isStudentActive(s) {
   const d = new Date();
   const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  return !s.lastDate || s.lastDate >= today;
+  return !isIsoDate(s.lastDate) || s.lastDate >= today;
 }
 
 function shortDate(d) {
@@ -1054,7 +1064,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   useEffect(() => {
     if (dbLoading) return;
     students.forEach(s => {
-      if (s.transitionTo && s.transitionDate && s.transitionDate <= todayIso) {
+      if (s.transitionTo && isIsoDate(s.transitionDate) && s.transitionDate <= todayIso) {
         updateStudent(s.id, { classId: s.transitionTo, transitionTo: null, transitionDate: null });
       }
     });
@@ -1066,7 +1076,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so an imported "Last Date" for them
   // isn't a meaningful "already left" signal — filtering them out by it wrongly hid a small number of waitlist
   // students (present correctly in Inquiries, which doesn't apply this filter) from their own class page.
-  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status) || !s.lastDate || s.lastDate >= todayIso));
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status) || !isIsoDate(s.lastDate) || s.lastDate >= todayIso));
   const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
   const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
 
@@ -1725,8 +1735,8 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   //   - their Started date is on or before the Friday of this week (or not set)
   //   - their Last Day is on or after the Monday of this week (or not set)
   const inWeek = (s) => {
-    if (weekMon && s.originalStart && s.originalStart > weekFriDate) return false;
-    if (weekFriDate && s.lastDate && s.lastDate < weekMon) return false;
+    if (weekMon && isIsoDate(s.originalStart) && s.originalStart > weekFriDate) return false;
+    if (weekFriDate && isIsoDate(s.lastDate) && s.lastDate < weekMon) return false;
     return true;
   };
 
@@ -1884,8 +1894,8 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
 
   // Split incoming: no date = immediate join; date reached for viewed week = promoted; future date = still pending
   const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
-  const incomingPromoted = incoming.filter(s => !s.transitionDate || (weekFri && s.transitionDate <= weekFri));
-  const incomingPending  = incoming.filter(s => s.transitionDate && (!weekFri || s.transitionDate > weekFri));
+  const incomingPromoted = incoming.filter(s => !isIsoDate(s.transitionDate) || (weekFri && s.transitionDate <= weekFri));
+  const incomingPending  = incoming.filter(s => isIsoDate(s.transitionDate) && (!weekFri || s.transitionDate > weekFri));
 
   // Sync the two scrollers
   useEffect(() => {
