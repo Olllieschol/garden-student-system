@@ -666,6 +666,14 @@ function guessClassFromText(s) {
   return null;
 }
 
+// Boilerplate footer lines that form-notification emails (e.g. Tally) tack on after the
+// actual submitted fields — "Manage Submissions", "Does this submission look like spam?
+// Report it here.", etc. These carry no colon, so without this guard they get swallowed as
+// a continuation of whatever the last field was (almost always the final "anything else"
+// notes question), making notes appear to contain spam-report boilerplate when the parent
+// actually left that field blank.
+const EMAIL_FOOTER_RE = /^(manage submissions|does this submission look like spam|report it here\.?|view (this )?submission online|unsubscribe|powered by)\b/i;
+
 function parseEmail(text) {
   const lines = text.split('\n');
   // Build ordered (key, value) list, preserving order
@@ -674,6 +682,7 @@ function parseEmail(text) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
+    if (EMAIL_FOOTER_RE.test(line)) break; // stop — everything from here on is footer boilerplate, not content
     // A field label is "Label: value" where Label is reasonable length, has no @, no URL
     const m = line.match(/^([^:]{1,100}):\s*(.*)$/);
     if (m && !m[1].includes('@') && !m[1].toLowerCase().startsWith('http') && !m[1].includes('://')) {
