@@ -3135,12 +3135,19 @@ const SKIP_SHEETS = ['age calculator', 'total enrolment', 'enrolment forecast', 
 
 function buildColMap(blockOffset, baseOffset) {
   const o = blockOffset + baseOffset;
+  // Verified against the real workbook's raw cells column-by-column: there's a "Social Media"
+  // column between Parents Name and Phone that this map previously had no slot for, which shifted
+  // every field after it by one — `email` was reading Social Media, `lengthOfStay` was reading the
+  // real Email column, `bondPaid` was reading Length-of-stay TEXT (not a date), `periodFrom` was
+  // reading the real Bond-paid date, `periodUntil` was reading the real Period-From date, and the
+  // real Period-Until column (the actual withdrawal date on the far right) was never read at all.
+  // `no` also previously ignored baseOffset entirely (`blockOffset + 0`), pointing at a blank column.
   return {
-    no: blockOffset + 0, name: 1 + o, originalStart: 2 + o, returningDate: 3 + o, lastDate: 4 + o,
+    no: 0 + o, name: 1 + o, originalStart: 2 + o, returningDate: 3 + o, lastDate: 4 + o,
     dob: 5 + o, currentAge: 6 + o, mon: 7 + o, tue: 8 + o, wed: 9 + o, thu: 10 + o, fri: 11 + o,
-    lunch: 12 + o, nationality: 13 + o, parents: 14 + o, email: 15 + o, phone: 16 + o,
-    note: 17 + o, holidaySuspension: 18 + o, lengthOfStay: 19 + o, bondPaid: 20 + o,
-    periodFrom: 21 + o, periodUntil: 22 + o,
+    lunch: 12 + o, nationality: 13 + o, parents: 14 + o, socialMedia: 15 + o, phone: 16 + o,
+    note: 17 + o, holidaySuspension: 18 + o, email: 19 + o, lengthOfStay: 20 + o, bondPaid: 21 + o,
+    periodFrom: 22 + o, periodUntil: 23 + o,
   };
 }
 
@@ -3153,13 +3160,13 @@ function findLatestBlock(rows) {
   if (baseOffset < 0) baseOffset = 0;
 
   const MONTHS = { january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11,jan:0,feb:1,mar:2,apr:3,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
-  let bestBlock = 0, bestDate = null;
   // Each occupancy-period block is 26 columns wide (verified against real exported workbooks —
   // the block includes a "Social Media" column alongside Phone/Email that earlier analysis missed).
   // Using the wrong width here doesn't break block 0 (offset 0 either way), but for any later block
   // — i.e. whenever the most recent occupancy period isn't the first one in the sheet, which is the
   // common case — it silently misaligns every column, making DOB/date cells read as the child's name.
   const BLOCK_WIDTH = 26;
+  const blocks = [];
   for (let block = 0; block < 5; block++) {
     const offset = block * BLOCK_WIDTH;
     let period = '';
@@ -3172,10 +3179,30 @@ function findLatestBlock(rows) {
     if (endMatch) {
       const mon = MONTHS[endMatch[2].toLowerCase()];
       if (mon !== undefined) {
-        const d = new Date(parseInt(endMatch[3]), mon, parseInt(endMatch[1]));
-        if (!bestDate || d > bestDate) { bestDate = d; bestBlock = block; }
+        const fri = new Date(parseInt(endMatch[3]), mon, parseInt(endMatch[1]));
+        blocks.push({ block, fri });
       }
     }
+  }
+  // Real workbooks are exported several weeks ahead of time (e.g. today's block plus 4 upcoming
+  // weeks side by side), so simply picking whichever block has the LATEST date always grabs the
+  // furthest-future week instead of the one that's actually relevant right now — importing next
+  // month's attendance pattern as if it were today's. Instead: prefer whichever block's Mon–Fri
+  // range contains today; if none does (file only covers future or only past weeks), fall back to
+  // the nearest upcoming block, and only fall back to the most recent past block if every block
+  // in the file is already over.
+  let bestBlock = 0, bestDate = null;
+  if (blocks.length > 0) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let containing = null, nearestFuture = null, mostRecentPast = null;
+    for (const b of blocks) {
+      const mon = new Date(b.fri); mon.setDate(mon.getDate() - 4);
+      if (mon <= today && today <= b.fri) { containing = b; break; }
+      if (b.fri >= today && (!nearestFuture || b.fri < nearestFuture.fri)) nearestFuture = b;
+      if (b.fri < today && (!mostRecentPast || b.fri > mostRecentPast.fri)) mostRecentPast = b;
+    }
+    const chosen = containing || nearestFuture || mostRecentPast;
+    bestBlock = chosen.block; bestDate = chosen.fri;
   }
   // The occupancy period always spans a single Mon–Fri working week, and the matched date above is
   // its Friday (the last "d Month yyyy" token in the period text) — so Monday is just 4 days earlier.
@@ -3347,6 +3374,11 @@ function parseSpreadsheetFile(file, centre) {
             if (/wait[\s-]?list/.test(headerScan)) { section = 'wait_list'; continue; }
             if (/invoice/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'invoice_sent'; continue; }
             if (/quote/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'quote_sent'; continue; }
+            // "Placement Fee" is its own section (families who've paid a placement fee to hold a
+            // spot, tracked separately from the main Wait list). It was previously unrecognised as a
+            // section header, so the literal text "Placement Fee" fell through and got imported as a
+            // real student named "Placement Fee" carrying whatever status the section above it had.
+            if (/placement\s*fee/.test(headerScan)) { section = 'quote_sent'; continue; }
             if (!childName || /^\d+$/.test(childName)) continue;
             if (col1Lower === 'child name' || col1Lower === 'no') continue;
             if (section === 'between') {
