@@ -3058,6 +3058,10 @@ function SectionHead({ title }) {
 const SHEET_CLASS_MAP = {
   'el 1': 'el1', 'el2 daf': 'el2d', 'el2 hib': 'el2h',
   'pk saf': 'pks', 'pk lav': 'pkl', 'jr. kindergarten': 'jrk', 'kindergarten': 'kg',
+  // Sanur's workbook abbreviates the last two sheet names to just "JK" / "K" (Canggu's uses the
+  // full "Jr. Kindergarten" / "Kindergarten"), which fell through as unrecognised — mapped
+  // explicitly here since guessClassFromText's substring checks are too short to catch these safely.
+  'jk': 'jrk', 'k': 'kg',
 };
 const SKIP_SHEETS = ['age calculator', 'total enrolment', 'enrolment forecast', '25+ enrolments'];
 
