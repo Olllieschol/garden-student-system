@@ -92,6 +92,7 @@ const STATUSES = {
   quote_sent:        { label: 'Quote sent',        dot: 'bg-amber-500',   chip: 'bg-amber-50 text-amber-800 border-amber-200' },
   invoice_sent:      { label: 'Invoice sent',      dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-800 border-orange-200' },
   wait_list:         { label: 'Wait list',         dot: 'bg-violet-500',  chip: 'bg-violet-50 text-violet-800 border-violet-200' },
+  placement_fee:     { label: 'Placement fee',     dot: 'bg-pink-500',    chip: 'bg-pink-50 text-pink-800 border-pink-200' },
   suspended:         { label: 'On suspension',     dot: 'bg-blue-500',    chip: 'bg-blue-50 text-blue-800 border-blue-200' },
   extended_holiday:  { label: 'Extended holiday',  dot: 'bg-cyan-500',    chip: 'bg-cyan-50 text-cyan-800 border-cyan-200' },
   left:              { label: 'Left',              dot: 'bg-stone-400',   chip: 'bg-stone-50 text-stone-600 border-stone-200' },
@@ -1130,7 +1131,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so an imported "Last Date" for them
   // isn't a meaningful "already left" signal — filtering them out by it wrongly hid a small number of waitlist
   // students (present correctly in Inquiries, which doesn't apply this filter) from their own class page.
-  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status) || !isIsoDate(s.lastDate) || s.lastDate >= todayIso));
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status) || !isIsoDate(s.lastDate) || s.lastDate >= todayIso));
   const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
   const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
 
@@ -1312,14 +1313,14 @@ function GardenApp({ initialCentre = 'canggu' }) {
 
   const updateStudent = (id, patch) => {
     const current = students.find(s => s.id === id);
-    // Pipeline students (inquiry/quote_sent/invoice_sent/wait_list) often carry a stale
-    // imported "Last Date" that has no real meaning until they've actually started. Every
+    // Pipeline students (inquiry/quote_sent/invoice_sent/wait_list/placement_fee) often carry a
+    // stale imported "Last Date" that has no real meaning until they've actually started. Every
     // status-changing code path (Inquiries "Enrolled" button, class-table status dropdown,
     // Move Class panel, etc.) funnels through here, so clearing it centrally — rather than
     // relying on each caller to remember — guarantees a newly-enrolled/wait-listed student
     // never silently vanishes from ownStudents/isStudentActive due to a leftover past date.
     if (current && patch.status && patch.status !== current.status
-        && ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list'].includes(current.status)
+        && ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee'].includes(current.status)
         && ['enrolled', 'suspended'].includes(patch.status)
         && patch.lastDate === undefined) {
       patch = { ...patch, lastDate: '' };
@@ -1517,7 +1518,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
             </div>
             <nav className="px-3 pt-5 flex-1 overflow-y-auto">
               <NavItem icon={LayoutDashboard} label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-              <NavItem icon={FileText} label="Inquiries" active={view === 'inquiries'} onClick={() => setView('inquiries')} badge={students.filter(s => s.centre === centre && !s.archived && ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status)).length} />
+              <NavItem icon={FileText} label="Inquiries" active={view === 'inquiries'} onClick={() => setView('inquiries')} badge={students.filter(s => s.centre === centre && !s.archived && ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status)).length} />
               <NavItem icon={TrendingUp} label="Forecast" active={view === 'forecast'} onClick={() => setView('forecast')} />
               <button onClick={() => setClassesOpen(o => !o)} className="w-full mt-4 mb-1 flex items-center justify-between px-3 py-1.5 text-xs uppercase tracking-widest" style={{ color: 'var(--ink-faint)' }}>
                 <span>Classes</span>
@@ -1817,10 +1818,11 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   // start date fell after the currently-viewed week, even though they belong in the pipeline list
   // regardless of which week is selected.
   // Auto-order the pipeline list by how close each student is to enrolling: Wait list first,
-  // then Invoice sent, then Quote sent, then bare Inquiries.
-  const PIPELINE_ORDER = { wait_list: 0, invoice_sent: 1, quote_sent: 2, inquiry: 3 };
+  // then Placement fee (already paid to hold a spot), then Invoice sent, then Quote sent, then
+  // bare Inquiries.
+  const PIPELINE_ORDER = { wait_list: 0, placement_fee: 1, invoice_sent: 2, quote_sent: 3, inquiry: 4 };
   const waitlist = filterByStatus(students.filter(matchesSearch))
-    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status))
+    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status))
     .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status]);
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
 
@@ -2346,8 +2348,8 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
     setStatusOpen(true);
   };
   // Pipeline students move between the pre-enrolment stages, not to/from suspension.
-  const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list'].includes(student.status);
-  const statusOptions = isPipeline ? ['wait_list', 'invoice_sent', 'quote_sent', 'enrolled'] : ['suspended', 'enrolled'];
+  const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee'].includes(student.status);
+  const statusOptions = isPipeline ? ['wait_list', 'placement_fee', 'invoice_sent', 'quote_sent', 'enrolled'] : ['suspended', 'enrolled'];
   const cycleInvoice = () => {
     const order = ['not_sent','sent','paid','prepay'];
     const i = order.indexOf(student.invoiceStatus || 'not_sent');
@@ -3407,10 +3409,13 @@ function parseSpreadsheetFile(file, centre) {
             if (/invoice/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'invoice_sent'; continue; }
             if (/quote/.test(headerScan) && /sent|awaiting/.test(headerScan)) { section = 'quote_sent'; continue; }
             // "Placement Fee" is its own section (families who've paid a placement fee to hold a
-            // spot, tracked separately from the main Wait list). It was previously unrecognised as a
-            // section header, so the literal text "Placement Fee" fell through and got imported as a
-            // real student named "Placement Fee" carrying whatever status the section above it had.
-            if (/placement\s*fee/.test(headerScan)) { section = 'quote_sent'; continue; }
+            // spot, tracked separately from the main Wait list and from Quote sent). It was
+            // previously unrecognised as a section header, so the literal text "Placement Fee" fell
+            // through and got imported as a real student named "Placement Fee" carrying whatever
+            // status the section above it had. It now gets its own distinct 'placement_fee' status
+            // rather than being folded into 'quote_sent' — these families have already paid, they
+            // haven't just been quoted.
+            if (/placement\s*fee/.test(headerScan)) { section = 'placement_fee'; continue; }
             if (!childName || /^\d+$/.test(childName)) continue;
             if (col1Lower === 'child name' || col1Lower === 'no') continue;
             if (section === 'between') {
@@ -3663,7 +3668,7 @@ function DashboardView({ students, onJump, onExportAll }) {
   const { classes } = useClasses();
   // All counts use isStudentActive() — same logic as sidebar and class header
   const totalEnrolled  = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
-  const totalInquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent'].includes(s.status)).length;
+  const totalInquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent','placement_fee'].includes(s.status)).length;
   const waitList       = students.filter(s => s.status === 'wait_list').length;
   const suspended      = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isStudentActive(s)).length;
   const followUps      = students.filter(s => ['quote_sent','invoice_sent'].includes(s.status));
@@ -3766,7 +3771,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
   const [parsed, setParsed] = useState(null);
   const [paneOpen, setPaneOpen] = useState(false);
 
-  const inquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list'].includes(s.status));
+  const inquiries = students.filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status));
 
   const handleParse = () => {
     const r = parseEmail(emailText);
@@ -3790,7 +3795,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
 
   // Move inquiry to next status stage
   const advance = (id, currentStatus, target) => {
-    const order = { inquiry: 'quote_sent', quote_sent: 'invoice_sent', wait_list: 'enrolled' };
+    const order = { inquiry: 'quote_sent', quote_sent: 'invoice_sent', wait_list: 'enrolled', placement_fee: 'invoice_sent' };
     onUpdate(id, { status: target || order[currentStatus] || currentStatus });
   };
 
@@ -3949,10 +3954,10 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
       )}
 
       {/* Pipeline grouped by status */}
-      {['inquiry','quote_sent','invoice_sent','wait_list'].map(st => {
+      {['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].map(st => {
         const list = inquiries.filter(s => s.status === st);
         const status = STATUSES[st];
-        const nextLabel = { inquiry: 'Quote sent', quote_sent: 'Invoice sent', wait_list: 'Enrol now' }[st];
+        const nextLabel = { inquiry: 'Quote sent', quote_sent: 'Invoice sent', wait_list: 'Enrol now', placement_fee: 'Invoice sent' }[st];
 
         return (
           <div key={st} className="mb-6">
