@@ -664,6 +664,14 @@ function shortDate(d) {
   return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
 }
 
+// Renders the structured suspensions list (the source of truth, edited from the student's
+// "Holiday suspensions" panel) into the same free-text summary shown in the main class table's
+// "Holiday Suspension" column, so that column always reflects what was actually added instead of
+// staying blank/stale after an edit made only through the structured panel.
+function formatSuspensionsNote(ranges) {
+  return ranges.map((r, i) => `${i + 1}. ${shortDate(r.start)} - ${shortDate(r.end)}`).join('\n');
+}
+
 function titleCaseIfNeeded(s) {
   if (!s) return s;
   return s.split(' ').map(w => {
@@ -1061,9 +1069,23 @@ function GardenApp({ initialCentre = 'canggu' }) {
       // Migrate any free-text HS notes into structured suspensions
       const { students: migratedStudents, migrationLog } = migrateHolidaySuspensionNotes(dbStudents);
       const changed = migrationLog.filter(l => l.status === 'migrated' || l.status === 'deduped');
-      if ((changed.length > 0 || sanurClassIdsChanged) && supabase) {
-        // Persist migrated/deduped students (and any Sanur classId remap) back to DB
-        await supabase.from('students').upsert(migratedStudents.map(s => ({ id: String(s.id), data: s })));
+
+      // Backfill the "Holiday Suspension" table column for students who already have structured
+      // suspensions (added via the sidebar panel) but whose text column was never populated —
+      // this happened for any suspension added before the panel started writing that field back,
+      // and would otherwise stay permanently blank since nothing else regenerates it.
+      let hsColumnBackfilled = false;
+      const backfilledStudents = migratedStudents.map(s => {
+        if ((s.suspensions?.length || 0) > 0 && !String(s.holidaySuspension || '').trim()) {
+          hsColumnBackfilled = true;
+          return { ...s, holidaySuspension: formatSuspensionsNote(s.suspensions) };
+        }
+        return s;
+      });
+
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled) && supabase) {
+        // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill) back to DB
+        await supabase.from('students').upsert(backfilledStudents.map(s => ({ id: String(s.id), data: s })));
       }
       if (migrationLog.length > 0) {
         const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
@@ -1075,7 +1097,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
         if (!migrated.length && !deduped.length && !unparsed.length) console.info('[HS Migration] All clean — nothing to fix.');
       }
 
-      setStudents(migratedStudents);
+      setStudents(backfilledStudents);
       setClasses(sortClasses(dbClasses));
       setDbLoading(false);
     }
@@ -2272,10 +2294,13 @@ function SuspensionSection({ student, onUpdate }) {
     const updated = editIdx !== null
       ? susp.map((s, i) => i === editIdx ? { start, end } : s)
       : [...susp, { start, end }];
-    onUpdate({ suspensions: updated });
+    onUpdate({ suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) });
     cancel();
   };
-  const del = (i) => onUpdate({ suspensions: susp.filter((_, idx) => idx !== i) });
+  const del = (i) => {
+    const updated = susp.filter((_, idx) => idx !== i);
+    onUpdate({ suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) });
+  };
 
   return (
     <Section title={`Holiday suspensions  ${susp.length}/4`}>
@@ -2441,20 +2466,21 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
-        // The suspension-range overlay is just a display hint for days with no explicit stored
-        // value — it must stay clickable (not a plain <div>) so 'S' cycles like every other day
-        // state. Cycle from the raw *stored* value (not the displayed one): a blank cell inside a
-        // suspension range displays 'S' via the overlay, but is still blank underneath, so the
-        // next click must advance blank → 'F' (an explicit override), not blank → '' (a no-op that
-        // would just redisplay 'S' via the overlay again, making the click look like it did nothing).
         const stored = student[day] || '';
-        const effective = stored || (suspended ? 'S' : '');
+        // A day inside an official Holiday Suspension range must always display (and behave) as
+        // 'S', even if the cell already has an explicit stored 'F'/'H' from before the suspension
+        // was added — the daily-totals calc above already excludes suspended days from counts
+        // regardless of the stored value, so the visible cell has to agree with that, not show a
+        // stale value the front desk has to remember to clear manually. Suspended cells aren't
+        // click-cycled directly; edit or delete the suspension itself (in the student's Holiday
+        // suspensions list) to change it.
+        const effective = suspended ? 'S' : stored;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
-              onClick={() => onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] })}
+              onClick={() => { if (!suspended) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] }); }}
               title={suspended ? 'Holiday suspension' : undefined}
-              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'}`}>
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${suspended ? 'cursor-default' : ''}`}>
               {effective || '·'}
             </button>
           </td>
