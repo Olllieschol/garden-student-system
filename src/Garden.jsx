@@ -439,9 +439,10 @@ Is there anything else you would like us to know about your child?: Loves music 
 function ageFromDob(dob) {
   if (!dob || dob === 'tbc') return '–';
   const d = new Date(dob);
-  const now = new Date('2026-05-21');
+  const now = new Date();
   let y = now.getFullYear() - d.getFullYear();
   let m = now.getMonth() - d.getMonth();
+  if (now.getDate() < d.getDate()) m--;
   if (m < 0) { y--; m += 12; }
   return `${y}Y ${m}M`;
 }
