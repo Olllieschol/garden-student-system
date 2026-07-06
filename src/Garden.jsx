@@ -691,10 +691,11 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
     const note = [s.note, s.holidaySuspension].filter(Boolean).map(escapeHtml).join('<br>');
+    const genderColour = GENDER[s.gender]?.colour || GENDER.X.colour;
     return `
       <tr>
         <td class="num">${i + 1}</td>
-        <td class="name">${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.nationality || '')}</div></td>
+        <td class="name"><span class="gdot" style="background:${genderColour}"></span>${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.nationality || '')}</div></td>
         <td>${s.dob ? escapeHtml(shortDate(s.dob)) : ''}</td>
         <td>${escapeHtml(ageFromDob(s.dob))}</td>
         ${days.map(d => `<td class="daybox ${d === 'F' ? 'full' : d === 'H' ? 'half' : d === 'S' ? 'susp' : ''}">${d || ''}</td>`).join('')}
@@ -726,7 +727,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
 <title>${escapeHtml(className)} — Attendance — ${escapeHtml(weekLabel)}</title>
 <style>
   @page { size: landscape; margin: 10mm; }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   body { font-family: -apple-system, Helvetica, Arial, sans-serif; margin: 0; padding: 16px; color: #1c1917; }
   h1 { font-size: 18px; margin: 0 0 2px; }
   .meta { font-size: 12px; color: #57534e; margin-bottom: 12px; }
@@ -735,7 +736,8 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   th { background: #f5f5f4; text-transform: uppercase; font-size: 9px; letter-spacing: 0.03em; }
   td.num { text-align: center; width: 24px; }
   td.name { font-weight: 600; min-width: 130px; }
-  td.name .sub { font-weight: 400; font-size: 9.5px; color: #78716c; }
+  td.name .gdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  td.name .sub { font-weight: 400; font-size: 9.5px; color: #78716c; margin-left: 13px; }
   td.daybox { text-align: center; width: 22px; font-weight: 600; }
   td.daybox.full { background: #d1fae5; }
   td.daybox.half { background: #fef3c7; }
@@ -746,7 +748,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   .legend { margin-top: 10px; font-size: 10px; color: #57534e; display: flex; gap: 16px; }
   .legend span { display: inline-flex; align-items: center; gap: 4px; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-  @media print { body { padding: 0; } }
+  @media print { body { padding: 0; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; } }
 </style>
 </head>
 <body>
