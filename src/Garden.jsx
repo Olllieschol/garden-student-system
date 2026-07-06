@@ -3314,13 +3314,18 @@ function excelDateToISO(v) {
   return String(v);
 }
 
-// The source spreadsheet colours a day cell tan/brown ("FCE5CD") and leaves it textless to mark
-// a Holiday Suspension day — this is the *only* signal for those cells, so we read the cell's
-// fill colour directly (requires XLSX.read to be called with { cellStyles: true }) rather than
-// relying solely on parsing the Holiday Suspension note text into date ranges. Confirmed via the
-// real workbook that FCE5CD is used consistently for this across every class sheet.
+// The source spreadsheet colours a day cell orange/tan and leaves it textless to mark a Holiday
+// Suspension day — this is the *only* signal for those cells, so we read the cell's fill colour
+// directly (requires XLSX.read to be called with { cellStyles: true }) rather than relying solely
+// on parsing the Holiday Suspension note text into date ranges. Confirmed via the real workbooks
+// that the two centres use different fill colours here: Canggu's day cells use "FCE5CD" (a light
+// tan), while Sanur's day cells use "FFE599" (a stronger gold/orange) — FCE5CD only shows up on
+// Sanur's "Holiday suspension List" section-header rows, not on the actual per-day cells, which is
+// why Sanur suspensions weren't being detected. Both colours are accepted so this works for either
+// centre's file.
+const SUSPENSION_FILL_COLORS = new Set(['FCE5CD', 'FFE599']);
 function isSuspensionFill(cellStyle) {
-  return cellStyle?.patternType === 'solid' && cellStyle.fgColor?.rgb?.toUpperCase() === 'FCE5CD';
+  return cellStyle?.patternType === 'solid' && SUSPENSION_FILL_COLORS.has(cellStyle.fgColor?.rgb?.toUpperCase());
 }
 
 // The source spreadsheet also colours the "Child Name" cell itself to mark gender — pink
