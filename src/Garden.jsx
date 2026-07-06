@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from './supabase.js';
-import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Search, Plus, ChevronRight, ChevronDown, X, FileText, Users, LayoutDashboard, Settings, Building2, Check, AlertCircle, Calendar, MapPin, Phone, Mail, User as UserIcon, Edit3, Filter, Download, Upload, TrendingUp, AlertTriangle, Heart, Pill, BookOpen, ArrowRight, Trash2, Undo2, Redo2, Printer } from 'lucide-react';
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');`;
 
@@ -670,6 +670,126 @@ function shortDate(d) {
 // staying blank/stale after an edit made only through the structured panel.
 function formatSuspensionsNote(ranges) {
   return ranges.map((r, i) => `${i + 1}. ${shortDate(r.start)} - ${shortDate(r.end)}`).join('\n');
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Builds and opens a printable, landscape attendance sheet for one class/week — modelled on the
+// paper Excel sheet centres already print for staff to take attendance from, so the layout
+// (Child Name, DOB/Age, day-of-week boxes, Lunch, Parents Name + Phone No., Note) matches what
+// staff already know how to read, rather than the on-screen spreadsheet's full column set.
+function openPrintableAttendance({ className, ageRange, weekLabel, students, weekMon }) {
+  const dayIso = (di) => weekMon ? isoAddDays(weekMon, di) : null;
+  const rows = students.map((s, i) => {
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
+      const iso = dayIso(di);
+      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
+      return suspended ? 'S' : (s[day] || '');
+    });
+    const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
+    const parents = escapeHtml(s.parents || '');
+    const note = [s.note, s.holidaySuspension].filter(Boolean).map(escapeHtml).join('<br>');
+    return `
+      <tr>
+        <td class="num">${i + 1}</td>
+        <td class="name">${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.nationality || '')}</div></td>
+        <td>${s.dob ? escapeHtml(shortDate(s.dob)) : ''}</td>
+        <td>${escapeHtml(ageFromDob(s.dob))}</td>
+        ${days.map(d => `<td class="daybox ${d === 'F' ? 'full' : d === 'H' ? 'half' : d === 'S' ? 'susp' : ''}">${d || ''}</td>`).join('')}
+        <td class="lunch">${s.lunch ? '✓' : ''}</td>
+        <td>${parents}</td>
+        <td>${phone}</td>
+        <td class="note">${note}</td>
+      </tr>`;
+  }).join('');
+
+  const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
+    const iso = dayIso(di);
+    const present = students.filter(s => {
+      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
+      if (suspended) return false;
+      return s[day] === 'F' || s[day] === 'H';
+    });
+    return {
+      full: present.filter(s => s[day] === 'F').length,
+      half: present.filter(s => s[day] === 'H').length,
+      lunch: present.filter(s => s.lunch).length,
+    };
+  });
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(className)} — Attendance — ${escapeHtml(weekLabel)}</title>
+<style>
+  @page { size: landscape; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; margin: 0; padding: 16px; color: #1c1917; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .meta { font-size: 12px; color: #57534e; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th, td { border: 1px solid #d6d3d1; padding: 4px 6px; text-align: left; vertical-align: top; }
+  th { background: #f5f5f4; text-transform: uppercase; font-size: 9px; letter-spacing: 0.03em; }
+  td.num { text-align: center; width: 24px; }
+  td.name { font-weight: 600; min-width: 130px; }
+  td.name .sub { font-weight: 400; font-size: 9.5px; color: #78716c; }
+  td.daybox { text-align: center; width: 22px; font-weight: 600; }
+  td.daybox.full { background: #d1fae5; }
+  td.daybox.half { background: #fef3c7; }
+  td.daybox.susp { background: #dbeafe; }
+  td.lunch { text-align: center; width: 24px; }
+  td.note { min-width: 140px; font-size: 9.5px; }
+  tfoot td { font-weight: 700; background: #f5f5f4; }
+  .legend { margin-top: 10px; font-size: 10px; color: #57534e; display: flex; gap: 16px; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(className)}${ageRange ? ` (${escapeHtml(ageRange)})` : ''}</h1>
+  <div class="meta">Occupancy period: ${escapeHtml(weekLabel)} &nbsp;·&nbsp; ${students.length} students</div>
+  <table>
+    <thead>
+      <tr>
+        <th>No</th><th>Child name</th><th>DOB</th><th>Age</th>
+        <th>M</th><th>T</th><th>W</th><th>T</th><th>F</th>
+        <th>Lunch</th><th>Parents name</th><th>Phone no.</th><th>Note</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4">Full day / Half day / Lunch</td>
+        ${totals.map(t => `<td class="daybox">${t.full}/${t.half}</td>`).join('')}
+        <td>${totals.reduce((a, t) => a + t.lunch, 0)}</td>
+        <td colspan="3"></td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="legend">
+    <span><span class="swatch" style="background:#d1fae5"></span> Full day (F)</span>
+    <span><span class="swatch" style="background:#fef3c7"></span> Half day (H)</span>
+    <span><span class="swatch" style="background:#dbeafe"></span> Holiday suspension (S)</span>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // Some browsers fire onload reliably for document.write'd content, others (Safari) don't —
+  // guard with a flag so whichever fires first triggers the print dialog exactly once.
+  let printed = false;
+  const triggerPrint = () => { if (printed) return; printed = true; try { win.print(); } catch {} };
+  win.onload = triggerPrint;
+  setTimeout(triggerPrint, 300);
 }
 
 function titleCaseIfNeeded(s) {
@@ -1866,6 +1986,19 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
     return { day, f, h, total: f + h };
   });
 
+  // Same "already joined this week" split SpreadsheetWithTopScroll applies to incoming students,
+  // replicated here so the printed roster matches exactly who's shown on screen for this week.
+  const incomingPromoted = filteredIncoming.filter(s => !isIsoDate(s.transitionDate) || (weekFriDate && s.transitionDate <= weekFriDate));
+  const handlePrint = () => {
+    openPrintableAttendance({
+      className: currentClass.fullName,
+      ageRange: currentClass.age,
+      weekLabel: WEEKS[weekIdx]?.label || '',
+      students: [...active, ...incomingPromoted],
+      weekMon,
+    });
+  };
+
   return (
     <div className="flex-1 overflow-y-auto px-8 pt-7 pb-16">
       {/* Header */}
@@ -1922,6 +2055,9 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
           </button>
           <button onClick={onImport} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
             <Upload size={12} /> Import Excel
+          </button>
+          <button onClick={handlePrint} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
+            <Printer size={12} /> Print
           </button>
         </div>
       </div>
