@@ -1956,7 +1956,16 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
     return true;
   };
 
-  const filteredStudents = filterByStatus(students.filter(matchesSearch).filter(inWeek));
+  // `classId` only actually flips to the destination class once the REAL calendar date reaches
+  // transitionDate (see the auto-complete-transitions effect above) — it does NOT change just
+  // because the user is browsing a future week here. Without this extra check (applied only to
+  // this — the origin — class's own roster, never to `incomingStudents`, which already handles
+  // the destination side via incomingPromoted below), a student scheduled to move showed up
+  // twice for any week on/after their move date: once still in this class's roster, and once
+  // already "promoted" into the destination class's roster.
+  const notYetTransitioned = (s) => !(s.transitionTo && weekFriDate && isIsoDate(s.transitionDate) && s.transitionDate <= weekFriDate);
+
+  const filteredStudents = filterByStatus(students.filter(matchesSearch).filter(inWeek).filter(notYetTransitioned));
   const filteredIncoming = incomingStudents.filter(matchesSearch).filter(inWeek);
 
   const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
