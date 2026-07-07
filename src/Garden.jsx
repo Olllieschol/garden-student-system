@@ -947,7 +947,7 @@ function parseEmail(text) {
 const CSV_FLAT_COLS = [
   'id','name','gender','centre','classId','status',
   'dob','nationality','parents','phone','email',
-  'mon','tue','wed','thu','fri','lunch',
+  'mon','tue','wed','thu','fri','lunch','socialMedia',
   'note','originalStart','returningDate','lastDate','lengthOfStay',
   'bondPaid','bondAmount','periodFrom','periodUntil',
   'invoiceStatus','invoiceNote',
@@ -1024,6 +1024,7 @@ function parseGardenBackupCSV(text) {
     if (obj.id !== undefined) obj.id = Number(obj.id) || obj.id;
     if (obj.bondAmount !== undefined) obj.bondAmount = Number(obj.bondAmount) || 0;
     obj.lunch = obj.lunch === 'true' || obj.lunch === true;
+    obj.socialMedia = obj.socialMedia === 'true' || obj.socialMedia === true;
     obj.archived = obj.archived === 'true' || obj.archived === true;
     obj.hasMedicalFlag = obj.hasMedicalFlag === 'true' || obj.hasMedicalFlag === true;
     obj.hasLastDayFlag = obj.hasLastDayFlag === 'true' || obj.hasLastDayFlag === true;
@@ -1445,7 +1446,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
       dob: data.dob || '', nationality: data.nationality || '', parents: data.parents || '',
       phone: data.phone || '', email: data.email || '',
       mon: data.mon || '', tue: data.tue || '', wed: data.wed || '', thu: data.thu || '', fri: data.fri || '',
-      lunch: data.lunch || false, note: data.note || '', dietaryFlags: [], suspensions: [],
+      lunch: data.lunch || false, socialMedia: data.socialMedia || false, note: data.note || '', dietaryFlags: [], suspensions: [],
       originalStart: data.originalStart || '', returningDate: '', lastDate: '',
       lengthOfStay: data.lengthOfStay || 'Long term',
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
@@ -1831,6 +1832,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
               email: s.email || '',
               mon: s.mon || '', tue: s.tue || '', wed: s.wed || '', thu: s.thu || '', fri: s.fri || '',
               lunch: s.lunch || false,
+              socialMedia: s.socialMedia || false,
               note: s.note || '',
               holidaySuspension: s.holidaySuspension || '',
               dietaryFlags: [],
@@ -2192,6 +2194,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               <col style={{ width: '40px' }} />
               <col style={{ width: '40px' }} />
               <col style={{ width: '55px' }} />
+              <col style={{ width: '55px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
@@ -2218,6 +2221,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <th className="text-center font-medium px-2 py-2.5">T</th>
                 <th className="text-center font-medium px-2 py-2.5">F</th>
                 <th className="text-center font-medium px-2 py-2.5">Lunch</th>
+                <th className="text-center font-medium px-2 py-2.5">Social media</th>
                 <th className="text-left font-medium px-3 py-2.5">Bond paid</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid from</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid until</th>
@@ -2250,6 +2254,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                   </td>
                 ))}
                 <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch).length}</td>
+                <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.socialMedia).length}</td>
                 <td colSpan={9}></td>
               </tr>
 
@@ -2629,6 +2634,11 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
           {student.lunch && <Check size={12} className="text-white" />}
         </button>
       </td>
+      <td className="px-3 py-2 text-center">
+        <button onClick={() => onUpdate(student.id, { socialMedia: !student.socialMedia })} className={`w-5 h-5 rounded border ${student.socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
+          {student.socialMedia && <Check size={12} className="text-white" />}
+        </button>
+      </td>
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.bondPaid} onSave={v => onUpdate(student.id, { bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} mono />
       </td>
@@ -2934,6 +2944,12 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             <span style={{ color: 'var(--ink-faint)' }}>Lunch:</span>
             <button onClick={() => u({ lunch: !student.lunch })} className={`w-5 h-5 rounded border ${student.lunch ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
               {student.lunch && <Check size={12} className="text-white" />}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 py-1 text-sm">
+            <span style={{ color: 'var(--ink-faint)' }}>Social media:</span>
+            <button onClick={() => u({ socialMedia: !student.socialMedia })} className={`w-5 h-5 rounded border ${student.socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
+              {student.socialMedia && <Check size={12} className="text-white" />}
             </button>
           </div>
         </Section>
@@ -3334,6 +3350,10 @@ function buildColMapForBlock(rows, blockStart, blockEnd) {
     lunch: fallback(find(row0, v => v === 'lunch'), blockStart + 12),
     nationality: fallback(find(row0, v => v === 'nationality'), blockStart + 13),
     parents: fallback(find(row0, v => v.includes('parents name')), blockStart + 14),
+    // Only Sanur's workbook has this column at all (see note above); no fallback offset is given
+    // so Canggu's block (which has no such header anywhere in range) correctly resolves to -1
+    // instead of a guessed column that would misread some unrelated field as Social Media.
+    socialMedia: find(row0, v => v.includes('social media')),
     phone: fallback(find(row0, v => v.includes('phone')), blockStart + 15),
     note: fallback(find(row0, v => v === 'note'), blockStart + 16),
     holidaySuspension: fallback(find(row0, v => v.includes('holiday suspension')), blockStart + 17),
@@ -3608,6 +3628,7 @@ function parseSpreadsheetFile(file, centre) {
               wed: normaliseDay(row[COL.wed]), thu: normaliseDay(row[COL.thu]),
               fri: normaliseDay(row[COL.fri]),
               lunch: normaliseLunch(row[COL.lunch]),
+              socialMedia: COL.socialMedia >= 0 ? normaliseLunch(row[COL.socialMedia]) : false,
               note: String(row[COL.note] || '').trim(),
               holidaySuspension: String(row[COL.holidaySuspension] || '').trim(),
               originalStart: excelDateToISO(row[COL.originalStart]),
@@ -4698,6 +4719,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
   const [note, setNote] = useState('');
   const [days, setDays] = useState({ mon: '', tue: '', wed: '', thu: '', fri: '' });
   const [lunch, setLunch] = useState(false);
+  const [socialMedia, setSocialMedia] = useState(false);
 
   const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[prev[d] || ''] }));
 
@@ -4779,6 +4801,10 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
                 <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>Lunch</div>
                 <button onClick={() => setLunch(!lunch)} className={`w-full h-10 rounded border flex items-center justify-center ${lunch ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>{lunch && <Check size={14} className="text-white" />}</button>
               </div>
+              <div className="flex-1 text-center">
+                <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>Social media</div>
+                <button onClick={() => setSocialMedia(!socialMedia)} className={`w-full h-10 rounded border flex items-center justify-center ${socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>{socialMedia && <Check size={14} className="text-white" />}</button>
+              </div>
             </div>
           </div>
           <div>
@@ -4788,7 +4814,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
         </div>
         <div className="flex justify-end items-center gap-2 px-6 py-4 border-t" style={{ borderColor: 'var(--line)' }}>
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-md hover:bg-stone-100">Cancel</button>
-          <button onClick={() => onSave({ name, gender, dob, nationality, classId, status, parents, phone, email, originalStart, lengthOfStay, note, ...days, lunch })} disabled={!name.trim()} className="px-4 py-2 text-sm rounded-md text-white font-medium disabled:opacity-30" style={{ background: 'var(--accent)' }}>Add student</button>
+          <button onClick={() => onSave({ name, gender, dob, nationality, classId, status, parents, phone, email, originalStart, lengthOfStay, note, ...days, lunch, socialMedia })} disabled={!name.trim()} className="px-4 py-2 text-sm rounded-md text-white font-medium disabled:opacity-30" style={{ background: 'var(--accent)' }}>Add student</button>
         </div>
       </div>
     </div>
