@@ -2713,7 +2713,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.parents} onSave={v => onUpdate(student.id, { parents: v })} placeholder="— add parents" />
       </td>
-      <td className="px-2 py-2 text-xs">
+      <td className="px-2 py-2 text-xs" style={{ minWidth: '180px' }}>
         {student.lastDate && <div className="text-xs font-semibold mb-0.5" style={{ color: '#dc2626' }}>LAST DAY {shortDate(student.lastDate)}</div>}
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" multiline />
       </td>
