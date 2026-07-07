@@ -4681,6 +4681,8 @@ function AddOrEditClassModal({ existing, onClose, onSave, onDelete }) {
   const [capacity, setCapacity] = useState(existing?.capacity || 18);
   const [dot, setDot] = useState(existing?.dot || CLASS_COLOURS[0]);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const DELETE_CLASS_PASSWORD = 'thegardenstudents2024';
 
   const handleSave = () => {
     if (!name.trim()) return;
@@ -4733,9 +4735,24 @@ function AddOrEditClassModal({ existing, onClose, onSave, onDelete }) {
             )}
             {existing && confirmDelete && (
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-red-700">Delete this class?</span>
-                <button onClick={() => setConfirmDelete(false)} className="px-2 py-0.5 rounded border" style={{ borderColor: 'var(--line)' }}>No</button>
-                <button onClick={onDelete} className="px-2 py-0.5 rounded bg-red-600 text-white">Yes, delete</button>
+                <span className="text-red-700">Enter password to delete:</span>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={e => setDeletePassword(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && deletePassword === DELETE_CLASS_PASSWORD) onDelete(); }}
+                  autoFocus
+                  className="px-2 py-0.5 rounded border text-xs w-32"
+                  style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}
+                />
+                <button onClick={() => { setConfirmDelete(false); setDeletePassword(''); }} className="px-2 py-0.5 rounded border" style={{ borderColor: 'var(--line)' }}>No</button>
+                <button
+                  onClick={onDelete}
+                  disabled={deletePassword !== DELETE_CLASS_PASSWORD}
+                  className="px-2 py-0.5 rounded bg-red-600 text-white disabled:opacity-30"
+                >
+                  Yes, delete
+                </button>
               </div>
             )}
           </div>
