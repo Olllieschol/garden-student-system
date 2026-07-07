@@ -705,7 +705,11 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
-      return suspended ? 'S' : (s[day] || '');
+      const stored = s[day] || '';
+      // Only show 'S' on days the child is actually scheduled to attend (stored F/H/S) — a
+      // suspension shouldn't invent an attendance day that was never there in the first place
+      // (e.g. Althea only attends Tue/Thu/Fri; her Wed cell must stay blank during a suspension).
+      return suspended ? (stored ? 'S' : '') : stored;
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
@@ -2660,14 +2664,13 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const stored = student[day] || '';
-        // A day inside an official Holiday Suspension range must always display (and behave) as
-        // 'S', even if the cell already has an explicit stored 'F'/'H' from before the suspension
-        // was added — the daily-totals calc above already excludes suspended days from counts
-        // regardless of the stored value, so the visible cell has to agree with that, not show a
-        // stale value the front desk has to remember to clear manually. Suspended cells aren't
-        // click-cycled directly; edit or delete the suspension itself (in the student's Holiday
-        // suspensions list) to change it.
-        const effective = suspended ? 'S' : stored;
+        // A day inside an official Holiday Suspension range displays (and behaves) as 'S' only if
+        // the child was actually scheduled to attend that day (stored F/H/S) — a suspension must
+        // not invent an attendance day that was never there (e.g. a child who only attends
+        // Tue/Thu/Fri should still show a blank Wednesday during a suspension, not a stray 'S').
+        // Suspended cells aren't click-cycled directly; edit or delete the suspension itself (in
+        // the student's Holiday suspensions list) to change it.
+        const effective = suspended ? (stored ? 'S' : '') : stored;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
