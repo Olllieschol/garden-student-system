@@ -698,8 +698,11 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
         <td class="name"><span class="gdot" style="background:${genderColour}"></span>${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.nationality || '')}</div></td>
         <td>${s.dob ? escapeHtml(shortDate(s.dob)) : ''}</td>
         <td>${escapeHtml(ageFromDob(s.dob))}</td>
+        <td>${s.returningDate ? escapeHtml(shortDate(s.returningDate)) : ''}</td>
+        <td>${s.lastDate ? escapeHtml(shortDate(s.lastDate)) : ''}</td>
         ${days.map(d => `<td class="daybox ${d === 'F' ? 'full' : d === 'H' ? 'half' : d === 'S' ? 'susp' : ''}">${d || ''}</td>`).join('')}
         <td class="lunch">${s.lunch ? '✓' : ''}</td>
+        <td class="lunch">${s.socialMedia ? '✓' : ''}</td>
         <td>${parents}</td>
         <td>${phone}</td>
         <td class="note">${note}</td>
@@ -757,18 +760,18 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   <table>
     <thead>
       <tr>
-        <th>No</th><th>Child name</th><th>DOB</th><th>Age</th>
+        <th>No</th><th>Child name</th><th>DOB</th><th>Age</th><th>Returning</th><th>Last day</th>
         <th>M</th><th>T</th><th>W</th><th>T</th><th>F</th>
-        <th>Lunch</th><th>Parents name</th><th>Phone no.</th><th>Note</th>
+        <th>Lunch</th><th>Social media</th><th>Parents name</th><th>Phone no.</th><th>Note</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
       <tr>
-        <td colspan="4">Full day / Half day / Lunch</td>
+        <td colspan="6">Full day / Half day / Lunch</td>
         ${totals.map(t => `<td class="daybox">${t.full}/${t.half}</td>`).join('')}
         <td>${totals.reduce((a, t) => a + t.lunch, 0)}</td>
-        <td colspan="3"></td>
+        <td colspan="4"></td>
       </tr>
     </tfoot>
   </table>
