@@ -121,7 +121,7 @@ const SEED_STUDENTS = [
   // ====== EL 2 Daffodil — ACTIVE ======
   { id: 1, name: 'Wren Beaumont', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-04-12', nationality: 'British', parents: 'Alice / Tom', phone: '+62 ••• 4421 (M)\n+62 ••• 4422 (D)', email: 'alice@example.com\ntom@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: 'No nuts', dietaryFlags: ['no_nuts'],
     suspensions: [{ start: '2026-01-12', end: '2026-01-16' }],
     originalStart: '2025-08-04', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -132,7 +132,7 @@ const SEED_STUDENTS = [
 
   { id: 2, name: 'Theo Marais', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-07-22', nationality: 'French', parents: 'Camille / Luc', phone: '+62 ••• 8819 (M)', email: 'camille@example.com',
-    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], transitionTo: 'pks', transitionDate: '2026-07-07',
     suspensions: [],
     originalStart: '2025-09-15', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -143,7 +143,7 @@ const SEED_STUDENTS = [
 
   { id: 3, name: 'Indira Soewardjo', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-02-08', nationality: 'Indonesian', parents: 'Maya / Budi', phone: '+62 ••• 2210 (M)', email: 'maya@example.com',
-    mon: 'H', tue: 'H', wed: 'H', thu: 'H', fri: 'H', lunch: false,
+    mon: 'H', tue: 'H', wed: 'H', thu: 'H', fri: 'H', lunch: '',
     note: '', dietaryFlags: [],
     suspensions: [{ start: '2026-02-02', end: '2026-02-06' }, { start: '2026-03-23', end: '2026-03-27' }],
     originalStart: '2025-06-02', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -154,7 +154,7 @@ const SEED_STUDENTS = [
 
   { id: 4, name: 'Olive Kjeldsen', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-09-01', nationality: 'Danish', parents: 'Lise / Anders', phone: '+62 ••• 5577 (M)', email: 'lise@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: '', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: '', lunch: 'yes',
     note: '', dietaryFlags: [],
     suspensions: [],
     originalStart: '2025-11-03', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -165,7 +165,7 @@ const SEED_STUDENTS = [
 
   { id: 5, name: 'Felix Whittaker', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'suspended',
     dob: '2023-05-18', nationality: 'Australian', parents: 'Sarah / Pete', phone: '+62 ••• 9933 (M)\n+62 ••• 9934 (D)', email: 'sarah@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'HS 4–22 May 2026', dietaryFlags: [],
     suspensions: [
       { start: '2025-12-22', end: '2026-01-09' },
@@ -180,7 +180,7 @@ const SEED_STUDENTS = [
 
   { id: 6, name: 'Ines Volkov', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-08-15', nationality: 'Russian', parents: 'Anya / Mikhail', phone: '+62 ••• 6601 (M)', email: 'anya@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: '', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: '', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [],
     suspensions: [{ start: '2026-02-10', end: '2026-02-14' }],
     originalStart: '2026-01-20', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -191,7 +191,7 @@ const SEED_STUDENTS = [
 
   { id: 7, name: 'Arlo Tanaka-Pierce', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-11-30', nationality: 'Japanese / Australian', parents: 'Kana / Greg', phone: '+62 ••• 7745 (M)\n+62 ••• 7746 (D)', email: 'kana@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [],
     suspensions: [],
     originalStart: '2026-02-09', returningDate: '', lastDate: '', lengthOfStay: '25 weeks',
@@ -202,7 +202,7 @@ const SEED_STUDENTS = [
 
   { id: 8, name: 'Mila Halvorsen', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-06-04', nationality: 'Norwegian', parents: 'Solveig / Erik', phone: '+62 ••• 1102 (M)', email: 'solveig@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: 'No dairy', dietaryFlags: ['no_dairy'],
     suspensions: [],
     originalStart: '2025-10-06', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -213,7 +213,7 @@ const SEED_STUDENTS = [
 
   { id: 9, name: 'Kasper Linden', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-03-19', nationality: 'Swedish / Australian', parents: 'Astrid / Jonas', phone: '+62 ••• 3344 (M)', email: 'astrid@example.com',
-    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: '', lunch: true,
+    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: '', lunch: 'yes',
     note: '', dietaryFlags: [],
     suspensions: [{ start: '2026-01-19', end: '2026-01-30' }],
     originalStart: '2025-07-21', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -224,7 +224,7 @@ const SEED_STUDENTS = [
 
   { id: 10, name: 'Juno Castellano', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'enrolled',
     dob: '2023-10-09', nationality: 'Italian', parents: 'Giulia / Marco', phone: '+62 ••• 5500 (M)\n+62 ••• 5501 (D)', email: 'giulia@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [],
     suspensions: [],
     originalStart: '2025-12-08', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -236,7 +236,7 @@ const SEED_STUDENTS = [
   // ====== EL 2 Daffodil — WAITLIST ======
   { id: 11, name: 'Saskia Levin', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'invoice_sent',
     dob: '2023-03-25', nationality: 'German', parents: 'Hannah / Ben', phone: '+62 ••• 4470 (M)', email: 'hannah@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Invoice sent 16 May — awaiting confirmation', dietaryFlags: [],
     suspensions: [],
     originalStart: '2026-06-01', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -247,7 +247,7 @@ const SEED_STUDENTS = [
 
   { id: 12, name: 'Mira Halvorsen', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'quote_sent',
     dob: '2023-06-04', nationality: 'Norwegian', parents: 'Solveig / Erik', phone: '+62 ••• 1102 (M)', email: 'solveig@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Sister of Mila — twin enrolment', dietaryFlags: [],
     suspensions: [],
     originalStart: 'tbc', returningDate: '', lastDate: '', lengthOfStay: 'tbc',
@@ -258,7 +258,7 @@ const SEED_STUDENTS = [
 
   { id: 13, name: 'Bodhi Almeida', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'wait_list',
     dob: '2023-10-19', nationality: 'Portuguese', parents: 'Joana / Diogo', phone: '+62 ••• 3388 (M)', email: 'joana@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Returning to Bali July', dietaryFlags: [],
     suspensions: [],
     originalStart: '2026-07-13', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -270,7 +270,7 @@ const SEED_STUDENTS = [
   // ====== EL 2 Daffodil — RECENTLY LEFT ======
   { id: 14, name: 'Atlas Reyes', gender: 'M', centre: 'canggu', classId: 'el2d', status: 'left',
     dob: '2023-01-14', nationality: 'Mexican / Australian', parents: 'Paloma / Diego', phone: '+62 ••• 8800 (M)', email: 'paloma@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Family moved back to Sydney', dietaryFlags: [],
     suspensions: [],
     originalStart: '2025-06-30', returningDate: '', lastDate: '2026-04-25', lengthOfStay: 'Long term',
@@ -281,7 +281,7 @@ const SEED_STUDENTS = [
 
   { id: 15, name: 'Calla Donnelly', gender: 'F', centre: 'canggu', classId: 'el2d', status: 'left',
     dob: '2022-11-21', nationality: 'Irish', parents: 'Niamh / Sean', phone: '+62 ••• 4422 (M)', email: 'niamh@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Transitioned to PK Saffron 4 weeks early due to age', dietaryFlags: [],
     suspensions: [],
     originalStart: '2025-08-04', returningDate: '', lastDate: '2026-04-04', lengthOfStay: 'Long term',
@@ -293,42 +293,42 @@ const SEED_STUDENTS = [
   // ====== Other classes (for sidebar counts) ======
   { id: 21, name: 'Juno Pearce', gender: 'F', centre: 'canggu', classId: 'el1', status: 'enrolled',
     dob: '2024-08-11', nationality: 'British', parents: 'Emma / Will', phone: '+62 ••• 1001 (M)', email: 'emma@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: '', fri: '', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: '', fri: '', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2025-12-01', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-11-28', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [] },
   { id: 22, name: 'Otis Brennan', gender: 'M', centre: 'canggu', classId: 'el1', status: 'enrolled',
     dob: '2024-10-02', nationality: 'Australian', parents: 'Lily / Sam', phone: '+62 ••• 1002 (M)', email: 'lily@example.com',
-    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2026-01-08', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2026-01-04', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'sent', invoiceNote: '', prepay: null, siblings: [] },
   { id: 31, name: 'Esme Linwood', gender: 'F', centre: 'canggu', classId: 'el2h', status: 'enrolled',
     dob: '2023-05-30', nationality: 'British', parents: 'Cleo / Jack', phone: '+62 ••• 1101 (M)', email: 'cleo@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [{ start: '2026-01-12', end: '2026-01-16' }],
     originalStart: '2025-09-01', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-08-25', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [] },
   { id: 41, name: 'Rio Soewardjo', gender: 'M', centre: 'canggu', classId: 'pks', status: 'enrolled',
     dob: '2022-04-18', nationality: 'Indonesian', parents: 'Maya / Budi', phone: '+62 ••• 2210 (M)', email: 'maya@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: '', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: '', lunch: 'yes',
     note: 'Brother of Indira (EL2 Daffodil)', dietaryFlags: [], suspensions: [],
     originalStart: '2025-08-04', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-07-30', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [{ name: 'Indira Soewardjo', class: 'EL 2 Daffodil' }] },
   { id: 51, name: 'Cleo Marchetti', gender: 'F', centre: 'canggu', classId: 'pkl', status: 'enrolled',
     dob: '2022-09-09', nationality: 'Italian', parents: 'Sofia / Marco', phone: '+62 ••• 3301 (M)', email: 'sofia@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2025-08-04', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-07-30', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [] },
   { id: 61, name: 'Nico Albright', gender: 'M', centre: 'canggu', classId: 'jrk', status: 'enrolled',
     dob: '2021-11-22', nationality: 'American', parents: 'Hope / Dan', phone: '+62 ••• 4401 (M)', email: 'hope@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: 'Has speech delay (following CCS Calendar)', dietaryFlags: [], hasMedicalFlag: true,
     suspensions: [{ start: '2026-01-20', end: '2026-02-03' }, { start: '2026-03-23', end: '2026-04-04' }],
     originalStart: '2024-09-01', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
@@ -336,7 +336,7 @@ const SEED_STUDENTS = [
     invoiceStatus: 'prepay', invoiceNote: 'PAID 37 weeks', prepay: { weeks: 37, completed: 32, type: '37w', startDate: '2025-09-29' }, siblings: [] },
   { id: 71, name: 'Petra Vanek', gender: 'F', centre: 'canggu', classId: 'kg', status: 'enrolled',
     dob: '2020-06-15', nationality: 'Czech', parents: 'Lucie', phone: '+62 ••• 5501 (M)', email: 'lucie@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: 'LAST DAY 15 JUNE 2026 — moving to school', dietaryFlags: [], hasLastDayFlag: true,
     suspensions: [{ start: '2025-12-22', end: '2026-01-18' }, { start: '2026-03-23', end: '2026-04-04' }, { start: '2026-04-15', end: '2026-04-22' }],
     originalStart: '2024-01-15', returningDate: '', lastDate: '2026-06-15', lengthOfStay: 'Long term',
@@ -344,7 +344,7 @@ const SEED_STUDENTS = [
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [] },
   { id: 72, name: 'Lev Karpov', gender: 'M', centre: 'canggu', classId: 'kg', status: 'enrolled',
     dob: '2020-09-30', nationality: 'Russian', parents: 'Tatiana / Yuri', phone: '+62 ••• 5502 (M)', email: 'tatiana@example.com',
-    mon: 'F', tue: '', wed: 'F', thu: '', fri: 'F', lunch: true,
+    mon: 'F', tue: '', wed: 'F', thu: '', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2024-08-04', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2024-08-01', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
@@ -353,14 +353,14 @@ const SEED_STUDENTS = [
   // Sanur
   { id: 101, name: 'Mae Christensen', gender: 'F', centre: 'sanur', classId: 'el2d', status: 'enrolled',
     dob: '2023-07-04', nationality: 'Danish', parents: 'Frida / Lars', phone: '+62 ••• 9911 (M)', email: 'frida@example.com',
-    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: 'F', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2025-11-10', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-11-05', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
     invoiceStatus: 'paid', invoiceNote: '', prepay: null, siblings: [] },
   { id: 102, name: 'Kai Sutopo', gender: 'M', centre: 'sanur', classId: 'pks', status: 'enrolled',
     dob: '2022-12-01', nationality: 'Indonesian / Australian', parents: 'Wati / James', phone: '+62 ••• 9912 (M)', email: 'wati@example.com',
-    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: true,
+    mon: 'F', tue: 'F', wed: '', thu: 'F', fri: 'F', lunch: 'yes',
     note: '', dietaryFlags: [], suspensions: [],
     originalStart: '2025-09-15', returningDate: '', lastDate: '', lengthOfStay: 'Long term',
     bondPaid: '2025-09-10', bondAmount: 5000000, periodFrom: '2026-05-04', periodUntil: '2026-06-01',
@@ -369,7 +369,7 @@ const SEED_STUDENTS = [
   // ====== Pre-archived students (from earlier years) ======
   { id: 201, name: 'Indigo Faulkner', gender: 'M', centre: 'canggu', classId: 'kg', status: 'left',
     dob: '2018-03-15', nationality: 'British', parents: 'Tessa / Rohan', phone: '+62 ••• 4421 (M)', email: 'tessa@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Aged out — moved to primary school in Singapore', dietaryFlags: [], suspensions: [],
     originalStart: '2021-01-20', returningDate: '', lastDate: '2024-12-15', lengthOfStay: 'Long term',
     bondPaid: '2021-01-15', bondAmount: 5000000, periodFrom: '', periodUntil: '',
@@ -377,7 +377,7 @@ const SEED_STUDENTS = [
     archived: true, archivedAt: '2024-12-20' },
   { id: 202, name: 'Mei Yamamoto', gender: 'F', centre: 'canggu', classId: 'jrk', status: 'left',
     dob: '2019-07-08', nationality: 'Japanese', parents: 'Saki / Hiro', phone: '+81 90 ••• 4422', email: 'saki@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Family moved back to Tokyo', dietaryFlags: ['no_dairy'], suspensions: [],
     originalStart: '2022-08-01', returningDate: '', lastDate: '2024-06-30', lengthOfStay: 'Long term',
     bondPaid: '2022-07-25', bondAmount: 5000000, periodFrom: '', periodUntil: '',
@@ -385,7 +385,7 @@ const SEED_STUDENTS = [
     archived: true, archivedAt: '2024-07-05' },
   { id: 203, name: 'Lucca Romano', gender: 'M', centre: 'canggu', classId: 'pks', status: 'left',
     dob: '2020-11-22', nationality: 'Italian', parents: 'Elena / Pietro', phone: '+62 ••• 5533 (M)', email: 'elena@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Returning family — possible re-enrolment 2026/2027', dietaryFlags: [], suspensions: [],
     originalStart: '2023-02-10', returningDate: '', lastDate: '2024-11-30', lengthOfStay: 'Long term',
     bondPaid: '2023-02-05', bondAmount: 5000000, periodFrom: '', periodUntil: '',
@@ -393,7 +393,7 @@ const SEED_STUDENTS = [
     archived: true, archivedAt: '2024-12-05' },
   { id: 204, name: 'Zara Achterberg', gender: 'F', centre: 'canggu', classId: 'el2h', status: 'left',
     dob: '2021-04-30', nationality: 'Dutch', parents: 'Anouk / Bram', phone: '+31 6 ••• 7788', email: 'anouk@example.com',
-    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: false,
+    mon: '', tue: '', wed: '', thu: '', fri: '', lunch: '',
     note: 'Sister of new inquiry Noa Lindgren — verify if related family', dietaryFlags: [], suspensions: [],
     originalStart: '2023-09-04', returningDate: '', lastDate: '2025-07-25', lengthOfStay: 'Long term',
     bondPaid: '2023-08-30', bondAmount: 5000000, periodFrom: '', periodUntil: '',
@@ -676,6 +676,25 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Lunch / Social media are three-state fields: '' (blank/not set), 'yes' (black tick), 'no' (red
+// cross) — needed because those fields aren't simple yes/no toggles in the real roster; staff
+// need to explicitly mark "no" (e.g. a parent declined social media use) distinctly from "not yet
+// asked/blank", which a plain boolean can't represent.
+function cycleTriState(v) {
+  return v === 'yes' ? 'no' : v === 'no' ? '' : 'yes';
+}
+
+function TriStateBox({ value, onClick, className = 'w-5 h-5', iconSize = 12 }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`${className} rounded border flex items-center justify-center ${value === 'yes' ? 'bg-stone-900 border-stone-900' : value === 'no' ? 'bg-red-600 border-red-600' : 'bg-white border-stone-300'}`}>
+      {value === 'yes' && <Check size={iconSize} className="text-white" />}
+      {value === 'no' && <X size={iconSize} className="text-white" />}
+    </button>
+  );
+}
+
 // Builds and opens a printable, landscape attendance sheet for one class/week — modelled on the
 // paper Excel sheet centres already print for staff to take attendance from, so the layout
 // (Child Name, DOB/Age, day-of-week boxes, Lunch, Parents Name + Phone No., Note) matches what
@@ -701,8 +720,8 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
         <td>${s.returningDate ? escapeHtml(shortDate(s.returningDate)) : ''}</td>
         <td>${s.lastDate ? escapeHtml(shortDate(s.lastDate)) : ''}</td>
         ${days.map(d => `<td class="daybox ${d === 'F' ? 'full' : d === 'H' ? 'half' : d === 'S' ? 'susp' : ''}">${d || ''}</td>`).join('')}
-        <td class="lunch">${s.lunch ? '✓' : ''}</td>
-        <td class="lunch">${s.socialMedia ? '✓' : ''}</td>
+        <td class="lunch${s.lunch === 'no' ? ' no' : ''}">${s.lunch === 'yes' ? '✓' : s.lunch === 'no' ? '✕' : ''}</td>
+        <td class="lunch${s.socialMedia === 'no' ? ' no' : ''}">${s.socialMedia === 'yes' ? '✓' : s.socialMedia === 'no' ? '✕' : ''}</td>
         <td>${parents}</td>
         <td>${phone}</td>
         <td class="note">${note}</td>
@@ -719,7 +738,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     return {
       full: present.filter(s => s[day] === 'F').length,
       half: present.filter(s => s[day] === 'H').length,
-      lunch: present.filter(s => s.lunch).length,
+      lunch: present.filter(s => s.lunch === 'yes').length,
     };
   });
 
@@ -746,6 +765,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   td.daybox.half { background: #fef3c7; }
   td.daybox.susp { background: #dbeafe; }
   td.lunch { text-align: center; width: 24px; }
+  td.lunch.no { color: #dc2626; font-weight: 700; }
   td.note { min-width: 140px; font-size: 9.5px; }
   tfoot td { font-weight: 700; background: #f5f5f4; }
   .legend { margin-top: 10px; font-size: 10px; color: #57534e; display: flex; gap: 16px; }
@@ -1026,8 +1046,10 @@ function parseGardenBackupCSV(text) {
     // Coerce types
     if (obj.id !== undefined) obj.id = Number(obj.id) || obj.id;
     if (obj.bondAmount !== undefined) obj.bondAmount = Number(obj.bondAmount) || 0;
-    obj.lunch = obj.lunch === 'true' || obj.lunch === true;
-    obj.socialMedia = obj.socialMedia === 'true' || obj.socialMedia === true;
+    // Old backups stored lunch/socialMedia as booleans ('true'/'false'); newer ones store the
+    // tri-state string directly ('yes'/'no'/''). Coerce either format to the tri-state scheme.
+    obj.lunch = obj.lunch === 'true' || obj.lunch === true ? 'yes' : obj.lunch === 'no' ? 'no' : '';
+    obj.socialMedia = obj.socialMedia === 'true' || obj.socialMedia === true ? 'yes' : obj.socialMedia === 'no' ? 'no' : '';
     obj.archived = obj.archived === 'true' || obj.archived === true;
     obj.hasMedicalFlag = obj.hasMedicalFlag === 'true' || obj.hasMedicalFlag === true;
     obj.hasLastDayFlag = obj.hasLastDayFlag === 'true' || obj.hasLastDayFlag === true;
@@ -1201,16 +1223,32 @@ function GardenApp({ initialCentre = 'canggu' }) {
       // this happened for any suspension added before the panel started writing that field back,
       // and would otherwise stay permanently blank since nothing else regenerates it.
       let hsColumnBackfilled = false;
+      // Lunch / Social media used to be plain booleans before the tri-state (blank/tick/red-X) UI
+      // existed. Without converting old `true`/`false` values to the new 'yes'/''/'no' strings,
+      // every existing student who had lunch/socialMedia === true would silently render as a
+      // blank box (since the UI now compares against the string 'yes'), losing real data visually.
+      let triStateMigrated = false;
+      const toTriState = (v) => {
+        if (v === true) return 'yes';
+        if (v === false || v === undefined || v === null) return '';
+        return v;
+      };
       const backfilledStudents = migratedStudents.map(s => {
+        let out = s;
         if ((s.suspensions?.length || 0) > 0 && !String(s.holidaySuspension || '').trim()) {
           hsColumnBackfilled = true;
-          return { ...s, holidaySuspension: formatSuspensionsNote(s.suspensions) };
+          out = { ...out, holidaySuspension: formatSuspensionsNote(s.suspensions) };
         }
-        return s;
+        if (typeof s.lunch === 'boolean' || typeof s.socialMedia === 'boolean') {
+          triStateMigrated = true;
+          out = { ...out, lunch: toTriState(out.lunch), socialMedia: toTriState(out.socialMedia) };
+        }
+        return out;
       });
 
-      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled) && supabase) {
-        // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill) back to DB
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated) && supabase) {
+        // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill,
+        // lunch/socialMedia tri-state migration) back to DB
         await supabase.from('students').upsert(backfilledStudents.map(s => ({ id: String(s.id), data: s })));
       }
       if (migrationLog.length > 0) {
@@ -1449,7 +1487,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
       dob: data.dob || '', nationality: data.nationality || '', parents: data.parents || '',
       phone: data.phone || '', email: data.email || '',
       mon: data.mon || '', tue: data.tue || '', wed: data.wed || '', thu: data.thu || '', fri: data.fri || '',
-      lunch: data.lunch || false, socialMedia: data.socialMedia || false, note: data.note || '', dietaryFlags: [], suspensions: [],
+      lunch: data.lunch || '', socialMedia: data.socialMedia || '', note: data.note || '', dietaryFlags: [], suspensions: [],
       originalStart: data.originalStart || '', returningDate: '', lastDate: '',
       lengthOfStay: data.lengthOfStay || 'Long term',
       bondPaid: '', bondAmount: 0, periodFrom: '', periodUntil: '',
@@ -1560,7 +1598,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
           wed: (all5 || has(['wed'])) ? dayVal : '',
           thu: (all5 || has(['thu'])) ? dayVal : '',
           fri: (all5 || has(['fri'])) ? dayVal : '',
-          lunch: dayVal === 'F',
+          lunch: dayVal === 'F' ? 'yes' : '',
         };
       })(),
       // Inquiry-only fields (preserved verbatim from email)
@@ -1834,8 +1872,8 @@ function GardenApp({ initialCentre = 'canggu' }) {
               phone: s.phone || '',
               email: s.email || '',
               mon: s.mon || '', tue: s.tue || '', wed: s.wed || '', thu: s.thu || '', fri: s.fri || '',
-              lunch: s.lunch || false,
-              socialMedia: s.socialMedia || false,
+              lunch: s.lunch || '',
+              socialMedia: s.socialMedia || '',
               note: s.note || '',
               holidaySuspension: s.holidaySuspension || '',
               dietaryFlags: [],
@@ -2265,8 +2303,8 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                     <div className="text-[10px] opacity-60 font-mono">{t.f}F·{t.h}H</div>
                   </td>
                 ))}
-                <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch).length}</td>
-                <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.socialMedia).length}</td>
+                <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.lunch === 'yes').length}</td>
+                <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink)' }}>{active.filter(s => s.socialMedia === 'yes').length}</td>
                 <td colSpan={9}></td>
               </tr>
 
@@ -2642,14 +2680,10 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         );
       })}
       <td className="px-3 py-2 text-center">
-        <button onClick={() => onUpdate(student.id, { lunch: !student.lunch })} className={`w-5 h-5 rounded border ${student.lunch ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
-          {student.lunch && <Check size={12} className="text-white" />}
-        </button>
+        <TriStateBox value={student.lunch} onClick={() => onUpdate(student.id, { lunch: cycleTriState(student.lunch) })} />
       </td>
       <td className="px-3 py-2 text-center">
-        <button onClick={() => onUpdate(student.id, { socialMedia: !student.socialMedia })} className={`w-5 h-5 rounded border ${student.socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
-          {student.socialMedia && <Check size={12} className="text-white" />}
-        </button>
+        <TriStateBox value={student.socialMedia} onClick={() => onUpdate(student.id, { socialMedia: cycleTriState(student.socialMedia) })} />
       </td>
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.bondPaid} onSave={v => onUpdate(student.id, { bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} mono />
@@ -2954,15 +2988,11 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
           <EditableRow label="Length of stay" value={student.lengthOfStay} onSave={v => u({ lengthOfStay: v })} />
           <div className="flex items-center gap-2 py-1 text-sm">
             <span style={{ color: 'var(--ink-faint)' }}>Lunch:</span>
-            <button onClick={() => u({ lunch: !student.lunch })} className={`w-5 h-5 rounded border ${student.lunch ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
-              {student.lunch && <Check size={12} className="text-white" />}
-            </button>
+            <TriStateBox value={student.lunch} onClick={() => u({ lunch: cycleTriState(student.lunch) })} />
           </div>
           <div className="flex items-center gap-2 py-1 text-sm">
             <span style={{ color: 'var(--ink-faint)' }}>Social media:</span>
-            <button onClick={() => u({ socialMedia: !student.socialMedia })} className={`w-5 h-5 rounded border ${student.socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>
-              {student.socialMedia && <Check size={12} className="text-white" />}
-            </button>
+            <TriStateBox value={student.socialMedia} onClick={() => u({ socialMedia: cycleTriState(student.socialMedia) })} />
           </div>
         </Section>
         <SuspensionSection student={student} onUpdate={u} />
@@ -3457,10 +3487,14 @@ function normaliseDay(v) {
   return '';
 }
 
+// Returns the tri-state value ('yes'/'no'/'') for an imported Excel cell.
 function normaliseLunch(v) {
-  if (!v) return false;
+  if (v === null || v === undefined) return '';
   const s = String(v).trim().toLowerCase();
-  return ['y','yes','true','1','✓','✔','x'].includes(s);
+  if (!s) return '';
+  if (['y','yes','true','1','✓','✔','x'].includes(s)) return 'yes';
+  if (['n','no','false','0'].includes(s)) return 'no';
+  return '';
 }
 
 const GIRL_NAMES = new Set(['leila','isabella','kiara','laura','poppy','sahara','sara','maya','nyala','aurora','nina','thea','laia','liepa','astrid','lily','saffira','jasmine','ashley','olivia','renee','vienna','kyla','lyveen','elya','savanna','elif','elara','mikaela','aikanata','araminta','stevie','imogen','sarah','siena','luna','georgina','elsie','ellerie','sofia','cleo','lyla','auri','auraya','kealei','anak','clara','noa']);
@@ -3640,7 +3674,7 @@ function parseSpreadsheetFile(file, centre) {
               wed: normaliseDay(row[COL.wed]), thu: normaliseDay(row[COL.thu]),
               fri: normaliseDay(row[COL.fri]),
               lunch: normaliseLunch(row[COL.lunch]),
-              socialMedia: COL.socialMedia >= 0 ? normaliseLunch(row[COL.socialMedia]) : false,
+              socialMedia: COL.socialMedia >= 0 ? normaliseLunch(row[COL.socialMedia]) : '',
               note: String(row[COL.note] || '').trim(),
               holidaySuspension: String(row[COL.holidaySuspension] || '').trim(),
               originalStart: excelDateToISO(row[COL.originalStart]),
@@ -4730,8 +4764,8 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
   const [lengthOfStay, setLengthOfStay] = useState('Long term');
   const [note, setNote] = useState('');
   const [days, setDays] = useState({ mon: '', tue: '', wed: '', thu: '', fri: '' });
-  const [lunch, setLunch] = useState(false);
-  const [socialMedia, setSocialMedia] = useState(false);
+  const [lunch, setLunch] = useState('');
+  const [socialMedia, setSocialMedia] = useState('');
 
   const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[prev[d] || ''] }));
 
@@ -4811,11 +4845,11 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
               ))}
               <div className="flex-1 text-center">
                 <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>Lunch</div>
-                <button onClick={() => setLunch(!lunch)} className={`w-full h-10 rounded border flex items-center justify-center ${lunch ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>{lunch && <Check size={14} className="text-white" />}</button>
+                <TriStateBox value={lunch} onClick={() => setLunch(cycleTriState(lunch))} className="w-full h-10" iconSize={14} />
               </div>
               <div className="flex-1 text-center">
                 <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>Social media</div>
-                <button onClick={() => setSocialMedia(!socialMedia)} className={`w-full h-10 rounded border flex items-center justify-center ${socialMedia ? 'bg-stone-900 border-stone-900' : 'bg-white border-stone-300'}`}>{socialMedia && <Check size={14} className="text-white" />}</button>
+                <TriStateBox value={socialMedia} onClick={() => setSocialMedia(cycleTriState(socialMedia))} className="w-full h-10" iconSize={14} />
               </div>
             </div>
           </div>
