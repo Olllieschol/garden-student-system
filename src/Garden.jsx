@@ -2231,7 +2231,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
 
       <div className="rounded-b-lg border overflow-hidden" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
         <div ref={bottomRef} className="ss-table-container overflow-x-auto">
-          <table className="text-sm" style={{ minWidth: '2150px' }}>
+          <table className="text-sm" style={{ minWidth: '2230px' }}>
             <colgroup>
               <col style={{ width: '40px' }} />
               <col style={{ width: '240px' }} />
@@ -2254,7 +2254,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               <col style={{ width: '110px' }} />
               <col style={{ width: '120px' }} />
               <col style={{ width: '160px' }} />
-              <col style={{ width: '180px' }} />
+              <col style={{ width: '260px' }} />
               <col style={{ width: '170px' }} />
               <col style={{ width: '70px' }} />
             </colgroup>
@@ -2713,7 +2713,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.parents} onSave={v => onUpdate(student.id, { parents: v })} placeholder="— add parents" />
       </td>
-      <td className="px-2 py-2 text-xs" style={{ minWidth: '180px' }}>
+      <td className="px-2 py-2 text-xs" style={{ minWidth: '260px' }}>
         {student.lastDate && <div className="text-xs font-semibold mb-0.5" style={{ color: '#dc2626' }}>LAST DAY {shortDate(student.lastDate)}</div>}
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" multiline />
       </td>
