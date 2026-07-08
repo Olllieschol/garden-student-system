@@ -1145,7 +1145,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const [classesOpen, setClassesOpen] = useState(true);
   const [toast, setToast] = useState(null);
   const [showLeft, setShowLeft] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   // Undo/redo history — in-memory only (never persisted to localStorage/sessionStorage), so
   // it's always empty on a fresh page load and scoped to this tab's own session, same as
@@ -1814,16 +1813,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 <span className="text-sm font-medium">{view === 'class' ? currentClass?.fullName : view.charAt(0).toUpperCase() + view.slice(1)}</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-faint)' }} />
-                  <input
-                    placeholder="Search students…"
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="pl-9 pr-3 py-1.5 text-sm rounded-md border w-56 focus:outline-none focus:ring-2"
-                    style={{ borderColor: 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }}
-                  />
-                </div>
                 <button onClick={() => setView('inquiries')} className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-white transition hover:opacity-90" style={{ background: 'var(--accent)' }}>
                   <Plus size={14} /> New from email
                 </button>
@@ -1842,7 +1831,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 onImport={() => setImportModalOpen(true)}
                 onGoToInquiries={() => setView('inquiries')}
                 onUpdateClass={updateClass}
-                searchTerm={searchTerm}
                 onExportAll={handleExportAll}
               />
             )}
@@ -1981,7 +1969,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
 // CLASS VIEW (the meaty one)
 // ============================================================
 
-function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, searchTerm = '', onExportAll }) {
+function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, onExportAll }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeStatusFilters, setActiveStatusFilters] = useState([]);
   const currentTabRef = useRef(null);
@@ -1998,18 +1986,6 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
 
   const toggleStatusFilter = (key) => {
     setActiveStatusFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  };
-
-  const matchesSearch = (s) => {
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      s.name?.toLowerCase().includes(q) ||
-      s.parents?.toLowerCase().includes(q) ||
-      s.nationality?.toLowerCase().includes(q) ||
-      s.email?.toLowerCase().includes(q) ||
-      s.note?.toLowerCase().includes(q)
-    );
   };
 
   const filterByStatus = (arr) => {
@@ -2039,8 +2015,8 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   // already "promoted" into the destination class's roster.
   const notYetTransitioned = (s) => !(s.transitionTo && weekFriDate && isIsoDate(s.transitionDate) && s.transitionDate <= weekFriDate);
 
-  const filteredStudents = filterByStatus(students.filter(matchesSearch).filter(inWeek).filter(notYetTransitioned));
-  const filteredIncoming = incomingStudents.filter(matchesSearch).filter(inWeek);
+  const filteredStudents = filterByStatus(students.filter(inWeek).filter(notYetTransitioned));
+  const filteredIncoming = incomingStudents.filter(inWeek);
 
   const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
   // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so they don't have a
@@ -2051,7 +2027,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   // then Placement fee (already paid to hold a spot), then Invoice sent, then Quote sent, then
   // bare Inquiries.
   const PIPELINE_ORDER = { wait_list: 0, placement_fee: 1, invoice_sent: 2, quote_sent: 3, inquiry: 4 };
-  const waitlist = filterByStatus(students.filter(matchesSearch))
+  const waitlist = filterByStatus(students)
     .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status))
     .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status]);
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
