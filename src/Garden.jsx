@@ -436,9 +436,37 @@ Is there anything else you would like us to know about your child?: Loves music 
 // HELPERS
 // ============================================================
 
+// Best-effort conversion of a free-text date (as typed by a parent on the enrolment form, or
+// typed manually by staff) into the ISO yyyy-mm-dd format the date picker and age calculation
+// require. Falls back to returning the input unchanged if no known pattern matches.
+function normalizeDobToIso(v) {
+  if (!v) return v;
+  const s = v.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const MONTHS = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = (parseInt(y) < 50 ? '20' : '19') + y;
+    if (parseInt(mo) <= 12 && parseInt(d) <= 31) return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?,?\s+(\d{4})$/);
+  if (m && MONTHS[m[2].slice(0, 3).toLowerCase()]) {
+    return `${m[3]}-${String(MONTHS[m[2].slice(0, 3).toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  m = s.match(/^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/);
+  if (m && MONTHS[m[1].slice(0, 3).toLowerCase()]) {
+    return `${m[3]}-${String(MONTHS[m[1].slice(0, 3).toLowerCase()]).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  return s;
+}
+
 function ageFromDob(dob) {
   if (!dob || dob === 'tbc') return '–';
-  const d = new Date(dob);
+  let d = new Date(dob);
+  if (isNaN(d)) d = new Date(normalizeDobToIso(dob));
+  if (isNaN(d)) return '–';
   const now = new Date();
   let y = now.getFullYear() - d.getFullYear();
   let m = now.getMonth() - d.getMonth();
@@ -659,7 +687,8 @@ function isStudentActive(s) {
 
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
-  const dt = new Date(d);
+  let dt = new Date(d);
+  if (isNaN(dt)) dt = new Date(normalizeDobToIso(d));
   if (isNaN(dt)) return d;
   return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
 }
@@ -913,7 +942,7 @@ function parseEmail(text) {
         f.childNameRaw = v;
         break;
       case 'Nationality': f.nationality = v; break;
-      case 'Date of Birth': f.dob = v; break;
+      case 'Date of Birth': f.dob = normalizeDobToIso(v); break;
       case 'Gender': f.gender = v; break;
       case 'Native Language': f.nativeLanguage = v; break;
       case 'Parent 1 Contact': f.parent1Name = v; break;
@@ -3266,7 +3295,7 @@ function EmailParseModal({ onClose, onConfirm }) {
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <Field label="Child's name" value={parsed.childName} onChange={v => updateField('childName', v)} flag flagText="capitalisation auto-fixed" />
-                <Field label="Date of birth" value={parsed.dob} onChange={v => updateField('dob', v)} />
+                <Field label="Date of birth" type="date" value={parsed.dob} onChange={v => updateField('dob', v)} />
                 <Field label="Nationality" value={parsed.nationality} onChange={v => updateField('nationality', v)} />
                 <Field label="Gender" value={parsed.gender} onChange={v => updateField('gender', v)} />
                 <Field label="Native language" value={parsed.nativeLanguage} onChange={v => updateField('nativeLanguage', v)} />
@@ -3306,11 +3335,11 @@ function EmailParseModal({ onClose, onConfirm }) {
   );
 }
 
-function Field({ label, value, onChange, flag, flagText }) {
+function Field({ label, value, onChange, flag, flagText, type = 'text' }) {
   return (
     <div>
       <label className="block text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{label}</label>
-      <input value={value || ''} onChange={e => onChange(e.target.value)} className="w-full px-2.5 py-1.5 text-sm rounded-md border focus:outline-none focus:ring-2" style={{ borderColor: 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }} />
+      <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} className="w-full px-2.5 py-1.5 text-sm rounded-md border focus:outline-none focus:ring-2" style={{ borderColor: 'var(--line)', background: 'var(--bg)', '--tw-ring-color': 'var(--accent)' }} />
       {flag && flagText && <div className="text-xs mt-1 italic" style={{ color: 'var(--terracotta)' }}>↑ {flagText}</div>}
     </div>
   );
@@ -4088,7 +4117,7 @@ function InquiriesView({ students, onSelectStudent, onParsedConfirm, onUpdate })
                 </div>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-4 max-w-7xl mb-6">
                   <Field label="Child's name" value={parsed.childName} onChange={v => updateField('childName', v)} flag={parsed.childName !== parsed.childNameRaw} flagText="capitalisation auto-fixed" />
-                  <Field label="Date of birth" value={parsed.dob} onChange={v => updateField('dob', v)} />
+                  <Field label="Date of birth" type="date" value={parsed.dob} onChange={v => updateField('dob', v)} />
                   <ReadOnlyField label="Age" value={ageFromDob(parsed.dob)} hint="calculated from DOB" />
                   <Field label="Gender" value={parsed.gender} onChange={v => updateField('gender', v)} />
                   <Field label="Nationality" value={parsed.nationality} onChange={v => updateField('nationality', v)} />
