@@ -724,6 +724,18 @@ function TriStateBox({ value, onClick, className = 'w-5 h-5', iconSize = 12 }) {
   );
 }
 
+// Dietary flag: a simple two-state box (blank / solid red), no icon — meant to be an
+// unmissable at-a-glance "this child has a dietary restriction" marker for staff, separate
+// from the detailed dietaryFlags list which records what the restriction actually is.
+function DietaryBox({ value, onClick, className = 'w-5 h-5' }) {
+  return (
+    <button
+      onClick={onClick}
+      title={value ? 'Dietary — click to clear' : 'Click to flag dietary'}
+      className={`${className} rounded border ${value ? 'bg-red-600 border-red-600' : 'bg-white border-stone-300'}`} />
+  );
+}
+
 // Builds and opens a printable, landscape attendance sheet for one class/week — modelled on the
 // paper Excel sheet centres already print for staff to take attendance from, so the layout
 // (Child Name, DOB/Age, day-of-week boxes, Lunch, Parents Name + Phone No., Note) matches what
@@ -755,6 +767,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
         ${days.map(d => `<td class="daybox ${d === 'F' ? 'full' : d === 'H' ? 'half' : d === 'S' ? 'susp' : ''}">${d || ''}</td>`).join('')}
         <td class="lunch${s.lunch === 'no' ? ' no' : ''}">${s.lunch === 'yes' ? '✓' : s.lunch === 'no' ? '✕' : ''}</td>
         <td class="lunch${s.socialMedia === 'no' ? ' no' : ''}">${s.socialMedia === 'yes' ? '✓' : s.socialMedia === 'no' ? '✕' : ''}</td>
+        <td class="dietary${s.dietary ? ' flagged' : ''}"></td>
         <td>${parents}</td>
         <td>${phone}</td>
         <td class="note">${note}</td>
@@ -799,6 +812,8 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   td.daybox.susp { background: #dbeafe; }
   td.lunch { text-align: center; width: 24px; }
   td.lunch.no { color: #dc2626; font-weight: 700; }
+  td.dietary { width: 24px; text-align: center; }
+  td.dietary.flagged { background: #dc2626; }
   td.note { min-width: 140px; font-size: 9.5px; }
   tfoot td { font-weight: 700; background: #f5f5f4; }
   .legend { margin-top: 10px; font-size: 10px; color: #57534e; display: flex; gap: 16px; }
@@ -815,7 +830,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
       <tr>
         <th>No</th><th>Child name</th><th>DOB</th><th>Age</th><th>Returning</th><th>Last day</th>
         <th>M</th><th>T</th><th>W</th><th>T</th><th>F</th>
-        <th>Lunch</th><th>Social media</th><th>Parents name</th><th>Phone no.</th><th>Note</th>
+        <th>Lunch</th><th>Social media</th><th>Dietary</th><th>Parents name</th><th>Phone no.</th><th>Note</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -824,7 +839,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
         <td colspan="6">Full day / Half day / Lunch</td>
         ${totals.map(t => `<td class="daybox">${t.full}/${t.half}</td>`).join('')}
         <td>${totals.reduce((a, t) => a + t.lunch, 0)}</td>
-        <td colspan="4"></td>
+        <td colspan="5"></td>
       </tr>
     </tfoot>
   </table>
@@ -832,6 +847,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     <span><span class="swatch" style="background:#d1fae5"></span> Full day (F)</span>
     <span><span class="swatch" style="background:#fef3c7"></span> Half day (H)</span>
     <span><span class="swatch" style="background:#dbeafe"></span> Holiday suspension (S)</span>
+    <span><span class="swatch" style="background:#dc2626"></span> Dietary</span>
   </div>
 </body>
 </html>`;
@@ -1003,7 +1019,7 @@ function parseEmail(text) {
 const CSV_FLAT_COLS = [
   'id','name','gender','centre','classId','status',
   'dob','nationality','parents','phone','email',
-  'mon','tue','wed','thu','fri','lunch','socialMedia',
+  'mon','tue','wed','thu','fri','lunch','socialMedia','dietary',
   'note','originalStart','returningDate','lastDate','lengthOfStay',
   'bondPaid','bondAmount','periodFrom','periodUntil',
   'invoiceStatus','invoiceNote',
@@ -2254,6 +2270,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               <col style={{ width: '40px' }} />
               <col style={{ width: '55px' }} />
               <col style={{ width: '55px' }} />
+              <col style={{ width: '70px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
@@ -2281,6 +2298,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <th className="text-center font-medium px-2 py-2.5">F</th>
                 <th className="text-center font-medium px-2 py-2.5">Lunch</th>
                 <th className="text-center font-medium px-2 py-2.5">Social media</th>
+                <th className="text-center font-medium px-2 py-2.5">Dietary</th>
                 <th className="text-left font-medium px-3 py-2.5">Bond paid</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid from</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid until</th>
@@ -2692,6 +2710,9 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       </td>
       <td className="px-3 py-2 text-center">
         <TriStateBox value={student.socialMedia} onClick={() => onUpdate(student.id, { socialMedia: cycleTriState(student.socialMedia) })} />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <DietaryBox value={student.dietary} onClick={() => onUpdate(student.id, { dietary: !student.dietary })} />
       </td>
       <td className="px-2 py-2 text-xs">
         <EditableCell value={student.bondPaid} onSave={v => onUpdate(student.id, { bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} mono />
