@@ -1077,41 +1077,86 @@ const CSV_FLAT_COLS = [
 const CSV_JSON_COLS = ['dietaryFlags','suspensions','scheduleChanges','siblings','prepay','parent1','parent2','nanny','doctor'];
 const CSV_ALL_COLS = [...CSV_FLAT_COLS, ...CSV_JSON_COLS];
 
-function csvCell(v) {
-  if (v === null || v === undefined) return '';
-  const s = String(v);
-  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
-    return '"' + s.replace(/"/g, '""') + '"';
-  }
-  return s;
-}
+const BACKUP_SHEET_NAMES = { canggu: 'Canggu', sanur: 'Sanur' };
 
-function exportStudentsToCSV(students) {
-  const header = CSV_ALL_COLS.join(',');
-  const rows = students.map(s => {
-    return CSV_ALL_COLS.map(col => {
+// Full-fidelity backup, as a real .xlsx workbook — one sheet per centre, so the two schools are
+// never mixed in the same tab — that's still exactly the same column set exportStudentsToCSV
+// used, so it stays a perfect round-trip: parseGardenBackupWorkbook() below reads it straight
+// back into the same student objects. Re-export weekly; if data is ever lost, re-importing the
+// latest one via Import Excel restores everything exactly as it was.
+function exportStudentsToXLSX(students) {
+  const wb = XLSX.utils.book_new();
+  Object.entries(BACKUP_SHEET_NAMES).forEach(([centre, sheetName]) => {
+    const group = students.filter(s => s.centre === centre);
+    if (group.length === 0) return;
+    const rows = [CSV_ALL_COLS, ...group.map(s => CSV_ALL_COLS.map(col => {
       if (CSV_JSON_COLS.includes(col)) {
         const v = s[col];
-        if (v === null || v === undefined) return '';
-        return csvCell(JSON.stringify(v));
+        return v === null || v === undefined ? '' : JSON.stringify(v);
       }
-      return csvCell(s[col] ?? '');
-    }).join(',');
+      return String(s[col] ?? '');
+    }))];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = CSV_ALL_COLS.map(col => ({ wch: col === 'name' ? 22 : ['note', 'email', 'phone', 'nationality'].includes(col) ? 26 : 13 }));
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
-  const csv = [header, ...rows].join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const today = localIso(new Date());
-  a.href = url;
-  a.download = `garden-backup-${today}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  XLSX.writeFile(wb, `garden-backup-${today}.xlsx`);
   return today;
 }
 
 function isGardenBackupCSV(text) {
   return text.trimStart().startsWith('id,name,gender,centre,classId');
+}
+
+function isGardenBackupWorkbook(workbook) {
+  const sheetNames = Object.values(BACKUP_SHEET_NAMES);
+  return workbook.SheetNames.some(name => {
+    if (!sheetNames.includes(name.trim())) return false;
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: '', raw: false });
+    return rows.length > 0 && rows[0][0] === 'id' && rows[0][1] === 'name' && rows[0][3] === 'centre';
+  });
+}
+
+function coerceBackupRow(obj) {
+  CSV_JSON_COLS.forEach(col => {
+    if (obj[col]) {
+      try { obj[col] = JSON.parse(obj[col]); } catch { obj[col] = col.endsWith('s') ? [] : null; }
+    } else {
+      obj[col] = col === 'dietaryFlags' || col === 'suspensions' || col === 'scheduleChanges' || col === 'siblings' ? [] : null;
+    }
+  });
+  if (obj.id !== undefined) obj.id = Number(obj.id) || obj.id;
+  if (obj.bondAmount !== undefined) obj.bondAmount = Number(obj.bondAmount) || 0;
+  // Old backups stored lunch/socialMedia as booleans ('true'/'false'); newer ones store the
+  // tri-state string directly ('yes'/'no'/''). Coerce either format to the tri-state scheme.
+  obj.lunch = obj.lunch === 'true' || obj.lunch === true ? 'yes' : obj.lunch === 'no' ? 'no' : '';
+  obj.socialMedia = obj.socialMedia === 'true' || obj.socialMedia === true ? 'yes' : obj.socialMedia === 'no' ? 'no' : '';
+  obj.dietary = obj.dietary === 'true' || obj.dietary === true;
+  obj.archived = obj.archived === 'true' || obj.archived === true;
+  obj.hasMedicalFlag = obj.hasMedicalFlag === 'true' || obj.hasMedicalFlag === true;
+  obj.hasLastDayFlag = obj.hasLastDayFlag === 'true' || obj.hasLastDayFlag === true;
+  return obj;
+}
+
+function parseGardenBackupWorkbook(workbook) {
+  const students = [];
+  const sheetNames = Object.values(BACKUP_SHEET_NAMES);
+  for (const sheetName of workbook.SheetNames) {
+    if (!sheetNames.includes(sheetName.trim())) continue;
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
+    if (rows.length < 2) continue;
+    const headers = rows[0];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.every(c => String(c ?? '').trim() === '')) continue;
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = row[idx] ?? ''; });
+      coerceBackupRow(obj);
+      if (obj.name) students.push(obj);
+    }
+  }
+  return students;
 }
 
 function parseGardenBackupCSV(text) {
@@ -1125,24 +1170,7 @@ function parseGardenBackupCSV(text) {
     const cells = parseCSVRow(line);
     const obj = {};
     headers.forEach((h, idx) => { obj[h] = cells[idx] ?? ''; });
-    // Parse JSON columns
-    CSV_JSON_COLS.forEach(col => {
-      if (obj[col]) {
-        try { obj[col] = JSON.parse(obj[col]); } catch { obj[col] = col.endsWith('s') ? [] : null; }
-      } else {
-        obj[col] = col === 'dietaryFlags' || col === 'suspensions' || col === 'scheduleChanges' || col === 'siblings' ? [] : null;
-      }
-    });
-    // Coerce types
-    if (obj.id !== undefined) obj.id = Number(obj.id) || obj.id;
-    if (obj.bondAmount !== undefined) obj.bondAmount = Number(obj.bondAmount) || 0;
-    // Old backups stored lunch/socialMedia as booleans ('true'/'false'); newer ones store the
-    // tri-state string directly ('yes'/'no'/''). Coerce either format to the tri-state scheme.
-    obj.lunch = obj.lunch === 'true' || obj.lunch === true ? 'yes' : obj.lunch === 'no' ? 'no' : '';
-    obj.socialMedia = obj.socialMedia === 'true' || obj.socialMedia === true ? 'yes' : obj.socialMedia === 'no' ? 'no' : '';
-    obj.archived = obj.archived === 'true' || obj.archived === true;
-    obj.hasMedicalFlag = obj.hasMedicalFlag === 'true' || obj.hasMedicalFlag === true;
-    obj.hasLastDayFlag = obj.hasLastDayFlag === 'true' || obj.hasLastDayFlag === true;
+    coerceBackupRow(obj);
     if (obj.name) students.push(obj);
   }
   return students;
@@ -1610,9 +1638,9 @@ function GardenApp({ initialCentre = 'canggu' }) {
   };
 
   const handleExportAll = () => {
-    const exportDate = exportStudentsToCSV(students);
+    const exportDate = exportStudentsToXLSX(students);
     localStorage.setItem('garden_last_export', exportDate);
-    showToast(`Exported ${students.length} students to garden-backup-${exportDate}.csv`);
+    showToast(`Exported ${students.length} students to garden-backup-${exportDate}.xlsx`);
   };
   const archiveStudent = (id) => {
     const s = students.find(x => x.id === id);
@@ -2171,7 +2199,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
             )}
           </div>
           <button onClick={onExportAll} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
-            <Download size={12} /> Export CSV
+            <Download size={12} /> Export backup
           </button>
           <button onClick={onImport} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>
             <Upload size={12} /> Import Excel
@@ -3908,7 +3936,8 @@ function ImportModal({ onClose, onConfirm, centre }) {
     setParsing(true);
     setParseError(null);
     try {
-      // Detect Garden backup CSV vs Garden Excel spreadsheet
+      // Detect a Garden backup (CSV or the newer per-centre .xlsx export) vs a real school
+      // enrolment spreadsheet, which goes through the bespoke parseSpreadsheetFile parser below.
       if (f.name.endsWith('.csv') || f.name.endsWith('.tsv')) {
         const text = await f.text();
         if (isGardenBackupCSV(text)) {
@@ -3920,6 +3949,29 @@ function ImportModal({ onClose, onConfirm, centre }) {
           }
           setIsBackup(true);
           // Build a result shape compatible with the preview section
+          const sheetMap = {};
+          students.forEach(s => { sheetMap[s.classId] = (sheetMap[s.classId] || 0) + 1; });
+          setParseResult({
+            students,
+            warnings: [],
+            sheets: Object.entries(sheetMap).map(([classId, count]) => ({ name: classId, count, classId })),
+          });
+          setStep('preview');
+          setParsing(false);
+          return;
+        }
+      }
+      if (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) {
+        const buf = await f.arrayBuffer();
+        const workbook = XLSX.read(buf, { type: 'array' });
+        if (isGardenBackupWorkbook(workbook)) {
+          const students = parseGardenBackupWorkbook(workbook);
+          if (students.length === 0) {
+            setParseError('No students found in the backup file.');
+            setParsing(false);
+            return;
+          }
+          setIsBackup(true);
           const sheetMap = {};
           students.forEach(s => { sheetMap[s.classId] = (sheetMap[s.classId] || 0) + 1; });
           setParseResult({
@@ -4086,7 +4138,7 @@ function DashboardView({ students, onJump, onExportAll }) {
       <div className="flex items-center justify-between mb-7">
         <div className="font-display text-4xl">Today, {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <button onClick={onExportAll} className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border hover:bg-white transition" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
-          <Download size={14} /> Export full school CSV
+          <Download size={14} /> Export full school backup
         </button>
       </div>
 
