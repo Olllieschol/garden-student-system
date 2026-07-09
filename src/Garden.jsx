@@ -1079,42 +1079,100 @@ const CSV_ALL_COLS = [...CSV_FLAT_COLS, ...CSV_JSON_COLS];
 
 const BACKUP_SHEET_NAMES = { canggu: 'Canggu', sanur: 'Sanur' };
 
-// Full-fidelity backup, as a real .xlsx workbook — one sheet per centre, so the two schools are
-// never mixed in the same tab — that's still exactly the same column set exportStudentsToCSV
-// used, so it stays a perfect round-trip: parseGardenBackupWorkbook() below reads it straight
-// back into the same student objects. Re-export weekly; if data is ever lost, re-importing the
-// latest one via Import Excel restores everything exactly as it was.
-function exportStudentsToXLSX(students) {
-  const wb = XLSX.utils.book_new();
-  Object.entries(BACKUP_SHEET_NAMES).forEach(([centre, sheetName]) => {
-    const group = students.filter(s => s.centre === centre);
-    if (group.length === 0) return;
-    const rows = [CSV_ALL_COLS, ...group.map(s => CSV_ALL_COLS.map(col => {
-      if (CSV_JSON_COLS.includes(col)) {
-        const v = s[col];
-        return v === null || v === undefined ? '' : JSON.stringify(v);
-      }
-      return String(s[col] ?? '');
-    }))];
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = CSV_ALL_COLS.map(col => ({ wch: col === 'name' ? 22 : ['note', 'email', 'phone', 'nationality'].includes(col) ? 26 : 13 }));
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+// Friendlier column headers for the exported workbook. Not exhaustive — any CSV_ALL_COLS field
+// without an entry here just falls back to its raw name, so adding a field to CSV_ALL_COLS can
+// never silently disappear from the export.
+const BACKUP_COL_LABELS = {
+  id: 'ID', name: 'Child Name', status: 'Status', classId: 'Class', centre: 'Centre', gender: 'Gender',
+  dob: 'Date of Birth', nationality: 'Nationality',
+  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri',
+  lunch: 'Lunch', socialMedia: 'Social Media', dietary: 'Dietary',
+  parents: 'Parents', phone: 'Phone', email: 'Email',
+  originalStart: 'Started', returningDate: 'Returning', lastDate: 'Last Day', lengthOfStay: 'Length of Stay',
+  bondPaid: 'Bond Paid', bondReturned: 'Bond Returned', bondAmount: 'Bond Amount',
+  periodFrom: 'Paid From', periodUntil: 'Paid Until', invoiceStatus: 'Invoice Status', invoiceNote: 'Invoice Note',
+  note: 'Note', suspensions: 'Holiday Suspensions', scheduleChanges: 'Schedule Changes',
+  transitionTo: 'Transition To', transitionDate: 'Transition Date',
+  archived: 'Archived', archivedAt: 'Archived At',
+  dietaryFlags: 'Dietary Flags', siblings: 'Siblings', prepay: 'Prepay Plan',
+  parent1: 'Parent 1', parent2: 'Parent 2', nanny: 'Nanny', doctor: 'Doctor',
+  nativeLanguage: 'Native Language', arrivalDate: 'Arrival Date', intendedStay: 'Intended Stay',
+  daysRequested: 'Days Requested', halfOrFull: 'Half/Full Day', requestedClassRaw: 'Requested Class (raw)',
+  formCompletedBy: 'Form Completed By',
+  vaccinationsYesNo: 'Vaccinations (Y/N)', vaccinationsDetails: 'Vaccinations Details',
+  medicalDisabilitiesYesNo: 'Medical Disabilities (Y/N)', medicalDisabilitiesDetails: 'Medical Disabilities Details',
+  medicalProblemsYesNo: 'Medical Problems (Y/N)', medicalProblemsDetails: 'Medical Problems Details',
+  foodAllergiesYesNo: 'Food Allergies (Y/N)', foodAllergiesDetails: 'Food Allergies Details', epipen: 'Epipen',
+  hasMedicalFlag: 'Has Medical Flag', hasLastDayFlag: 'Has Last Day Flag',
+};
+const backupColLabel = (col) => BACKUP_COL_LABELS[col] || col;
+
+// The columns staff actually look at go first; everything else (raw ids, rarely-touched inquiry
+// form detail, internal flags) trails at the end. Built from CSV_ALL_COLS itself — anything not
+// explicitly placed up front still ends up in the sheet exactly once, so a field can never be
+// silently dropped from the export by forgetting to list it here.
+const BACKUP_PRIORITY_COLS = [
+  'name', 'status', 'classId', 'gender', 'dob', 'nationality',
+  'mon', 'tue', 'wed', 'thu', 'fri', 'lunch', 'socialMedia', 'dietary',
+  'parents', 'phone', 'email',
+  'originalStart', 'returningDate', 'lastDate', 'lengthOfStay',
+  'bondPaid', 'bondReturned', 'bondAmount', 'periodFrom', 'periodUntil', 'invoiceStatus', 'invoiceNote',
+  'note', 'suspensions', 'scheduleChanges', 'transitionTo', 'transitionDate',
+  'dietaryFlags', 'siblings', 'prepay', 'parent1', 'parent2', 'nanny', 'doctor',
+];
+const BACKUP_EXPORT_ORDER = [...BACKUP_PRIORITY_COLS, ...CSV_ALL_COLS.filter(c => !BACKUP_PRIORITY_COLS.includes(c))];
+
+// Accepts either the friendly label or the raw field name as a header, so both newly-exported
+// and older backups (and hand-edited files) parse the same way.
+const BACKUP_LABEL_TO_COL = (() => {
+  const m = {};
+  CSV_ALL_COLS.forEach(col => {
+    m[col] = col;
+    const label = BACKUP_COL_LABELS[col];
+    if (label) m[label] = col;
   });
+  return m;
+})();
+
+function isBackupHeaderRow(headers) {
+  const mapped = new Set(headers.map(h => BACKUP_LABEL_TO_COL[h] || h));
+  return ['id', 'name', 'centre', 'classId', 'status'].every(f => mapped.has(f));
+}
+
+// Full-fidelity backup, as a real .xlsx workbook — scoped to a single centre (one file per
+// school, never mixed together), so exporting from Sanur only ever gives you Sanur's data. Still
+// exactly the same column set as before, just reordered/relabelled for readability, so it stays
+// a perfect round-trip: parseGardenBackupWorkbook() below reads it straight back into the same
+// student objects. Re-export weekly; if data is ever lost, re-importing the latest one via
+// Import Excel restores that centre exactly as it was, without touching the other centre.
+function exportStudentsToXLSX(students, centreId) {
+  const wb = XLSX.utils.book_new();
+  const group = students.filter(s => s.centre === centreId);
+  const rows = [BACKUP_EXPORT_ORDER.map(backupColLabel), ...group.map(s => BACKUP_EXPORT_ORDER.map(col => {
+    if (CSV_JSON_COLS.includes(col)) {
+      const v = s[col];
+      return v === null || v === undefined ? '' : JSON.stringify(v);
+    }
+    return String(s[col] ?? '');
+  }))];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = BACKUP_EXPORT_ORDER.map(col => ({ wch: col === 'name' ? 22 : ['note', 'email', 'phone', 'nationality', 'parents'].includes(col) ? 26 : 13 }));
+  const sheetName = BACKUP_SHEET_NAMES[centreId] || centreId;
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
   const today = localIso(new Date());
-  XLSX.writeFile(wb, `garden-backup-${today}.xlsx`);
+  XLSX.writeFile(wb, `garden-backup-${sheetName.toLowerCase()}-${today}.xlsx`);
   return today;
 }
 
 function isGardenBackupCSV(text) {
-  return text.trimStart().startsWith('id,name,gender,centre,classId');
+  const firstLine = text.trimStart().split(/\r?\n/)[0] || '';
+  return isBackupHeaderRow(parseCSVRow(firstLine));
 }
 
 function isGardenBackupWorkbook(workbook) {
-  const sheetNames = Object.values(BACKUP_SHEET_NAMES);
   return workbook.SheetNames.some(name => {
-    if (!sheetNames.includes(name.trim())) return false;
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: '', raw: false });
-    return rows.length > 0 && rows[0][0] === 'id' && rows[0][1] === 'name' && rows[0][3] === 'centre';
+    return rows.length > 0 && isBackupHeaderRow(rows[0]);
   });
 }
 
@@ -1141,12 +1199,10 @@ function coerceBackupRow(obj) {
 
 function parseGardenBackupWorkbook(workbook) {
   const students = [];
-  const sheetNames = Object.values(BACKUP_SHEET_NAMES);
   for (const sheetName of workbook.SheetNames) {
-    if (!sheetNames.includes(sheetName.trim())) continue;
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
-    if (rows.length < 2) continue;
-    const headers = rows[0];
+    if (rows.length < 2 || !isBackupHeaderRow(rows[0])) continue;
+    const headers = rows[0].map(h => BACKUP_LABEL_TO_COL[h] || h);
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (row.every(c => String(c ?? '').trim() === '')) continue;
@@ -1162,7 +1218,7 @@ function parseGardenBackupWorkbook(workbook) {
 function parseGardenBackupCSV(text) {
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   if (lines.length < 2) return [];
-  const headers = parseCSVRow(lines[0]);
+  const headers = parseCSVRow(lines[0]).map(h => BACKUP_LABEL_TO_COL[h] || h);
   const students = [];
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -1638,9 +1694,11 @@ function GardenApp({ initialCentre = 'canggu' }) {
   };
 
   const handleExportAll = () => {
-    const exportDate = exportStudentsToXLSX(students);
+    const centreLabel = BACKUP_SHEET_NAMES[centre] || centre;
+    const count = students.filter(s => s.centre === centre).length;
+    const exportDate = exportStudentsToXLSX(students, centre);
     localStorage.setItem('garden_last_export', exportDate);
-    showToast(`Exported ${students.length} students to garden-backup-${exportDate}.xlsx`);
+    showToast(`Exported ${count} ${centreLabel} students to garden-backup-${centreLabel.toLowerCase()}-${exportDate}.xlsx`);
   };
   const archiveStudent = (id) => {
     const s = students.find(x => x.id === id);
@@ -1998,13 +2056,15 @@ function GardenApp({ initialCentre = 'canggu' }) {
               siblings: [],
             }));
           }
-          // A full backup restore (isBackup) intentionally replaces EVERYTHING — the UI already
-          // discloses this ("will replace ALL current data"). A regular Excel import, though, is
-          // scoped to a single centre's roster and must NEVER touch the other centre's students —
-          // deleting `.neq('id', '__none__')` (matches every row) here was the bug that wiped both
+          // A backup restore replaces every student belonging to whichever centre(s) are actually
+          // present in the file being restored — backups are now exported one centre at a time,
+          // so a Sanur-only backup must only ever touch Sanur's rows, never Canggu's. A regular
+          // Excel import is likewise scoped to the single centre currently open — deleting
+          // `.neq('id', '__none__')` (matches every row) here was the bug that wiped both
           // centres' data on any single-centre import.
+          const backupCentres = new Set(newStudents.map(s => s.centre));
           const idsToDelete = isBackup
-            ? students.map(s => String(s.id))
+            ? students.filter(s => backupCentres.has(s.centre)).map(s => String(s.id))
             : students.filter(s => s.centre === centre).map(s => String(s.id));
           if (supabase) {
             suppressRealtime.current = true;
@@ -2021,7 +2081,9 @@ function GardenApp({ initialCentre = 'canggu' }) {
               setTimeout(() => { suppressRealtime.current = false; }, 2000);
             }
           }
-          setStudents(prev => isBackup ? newStudents : [...prev.filter(s => s.centre !== centre), ...newStudents]);
+          setStudents(prev => isBackup
+            ? [...prev.filter(s => !backupCentres.has(s.centre)), ...newStudents]
+            : [...prev.filter(s => s.centre !== centre), ...newStudents]);
           setImportModalOpen(false);
           showToast(`${isBackup ? 'Restored' : 'Imported'} ${newStudents.length} students`);
         }} />}
@@ -4014,6 +4076,12 @@ function ImportModal({ onClose, onConfirm, centre }) {
     return { total: s.length, parents: parentSet.size, enrolled: s.filter(x => x.status === 'enrolled').length };
   }, [parseResult]);
 
+  const backupCentreLabel = useMemo(() => {
+    if (!parseResult) return '';
+    const names = [...new Set(parseResult.students.map(s => BACKUP_SHEET_NAMES[s.centre] || s.centre))];
+    return names.join(' & ');
+  }, [parseResult]);
+
   const perClass = useMemo(() => {
     if (!parseResult) return [];
     const map = {};
@@ -4065,10 +4133,10 @@ function ImportModal({ onClose, onConfirm, centre }) {
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <div className="rounded-md border p-4 mb-4" style={{ borderColor: 'var(--line)', background: 'var(--accent-soft)' }}>
                 <div className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
-                  {isBackup ? `Garden backup — ${stats.total} students across ${parseResult.sheets.length} classes` : `Parsed ${stats.total} students from ${parseResult.sheets.length} sheets`}
+                  {isBackup ? `${backupCentreLabel} backup — ${stats.total} students across ${parseResult.sheets.length} classes` : `Parsed ${stats.total} students from ${parseResult.sheets.length} sheets`}
                 </div>
                 <div className="text-xs mt-1" style={{ color: 'var(--ink-soft)' }}>
-                  {isBackup ? 'This is a full Garden backup. Importing will replace ALL current data with this snapshot.' : 'Review the summary below and click Import to commit.'}
+                  {isBackup ? `This is a ${backupCentreLabel} backup. Restoring will replace all current ${backupCentreLabel} data with this snapshot — the other centre is untouched.` : 'Review the summary below and click Import to commit.'}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
@@ -4138,7 +4206,7 @@ function DashboardView({ students, onJump, onExportAll }) {
       <div className="flex items-center justify-between mb-7">
         <div className="font-display text-4xl">Today, {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
         <button onClick={onExportAll} className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border hover:bg-white transition" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
-          <Download size={14} /> Export full school backup
+          <Download size={14} /> Export backup
         </button>
       </div>
 
