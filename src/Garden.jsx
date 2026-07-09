@@ -17,6 +17,13 @@ function localIso(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Shared alphabetical sort used everywhere a class roster is displayed (on-screen and print) so
+// a class always reads in name order and a newly enrolled student lands in the right spot
+// automatically, rather than always appearing at the bottom of the list.
+function compareByName(a, b) {
+  return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true });
+}
+
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -2067,8 +2074,8 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const PIPELINE_ORDER = { wait_list: 0, placement_fee: 1, invoice_sent: 2, quote_sent: 3, inquiry: 4 };
   const waitlist = filterByStatus(students)
     .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status))
-    .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status]);
-  const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status));
+    .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status] || compareByName(a, b));
+  const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status)).sort(compareByName);
 
   const enrolledCount = students.filter(s => s.status === 'enrolled' && isStudentActive(s)).length;
   const suspendedCount = students.filter(s => ['suspended','extended_holiday'].includes(s.status) && isStudentActive(s)).length;
@@ -2095,7 +2102,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       className: currentClass.fullName,
       ageRange: currentClass.age,
       weekLabel: WEEKS[weekIdx]?.label || '',
-      students: [...active, ...incomingPromoted],
+      students: [...active, ...incomingPromoted].sort(compareByName),
       weekMon,
     });
   };
@@ -2225,7 +2232,8 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
   // Split incoming: no date = immediate join; date reached for viewed week = promoted; future date = still pending
   const weekFri = weekMon ? isoAddDays(weekMon, 4) : null;
   const incomingPromoted = incoming.filter(s => !isIsoDate(s.transitionDate) || (weekFri && s.transitionDate <= weekFri));
-  const incomingPending  = incoming.filter(s => isIsoDate(s.transitionDate) && (!weekFri || s.transitionDate > weekFri));
+  const incomingPending  = incoming.filter(s => isIsoDate(s.transitionDate) && (!weekFri || s.transitionDate > weekFri)).sort(compareByName);
+  const activeAndIncoming = [...active, ...incomingPromoted].sort(compareByName);
 
   // Sync the two scrollers
   useEffect(() => {
@@ -2335,13 +2343,10 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               </tr>
             </thead>
             <tbody>
-              {/* ACTIVE (includes incoming students who have no date or whose date has arrived) */}
-              <SectionDivider label="Active" count={active.length + incomingPromoted.length} colour="var(--accent)" />
-              {active.map((s, idx) => (
+              {/* ACTIVE (includes incoming students who have no date or whose date has arrived) — alphabetical by name */}
+              <SectionDivider label="Active" count={activeAndIncoming.length} colour="var(--accent)" />
+              {activeAndIncoming.map((s, idx) => (
                 <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
-              ))}
-              {incomingPromoted.map((s, idx) => (
-                <StudentRow key={s.id} student={s} idx={active.length + idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
               ))}
               {/* Totals */}
               <tr className="border-t border-b font-medium text-xs" style={{ borderColor: 'var(--line)', background: 'var(--accent-soft)' }}>
