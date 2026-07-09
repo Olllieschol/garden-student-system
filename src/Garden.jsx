@@ -713,6 +713,16 @@ function dayValueForDate(student, day, dateIso) {
   return change ? (change[day] || '') : (student[day] || '');
 }
 
+// A suspension should only hide 'S' on a blank day when that blank is *known* non-attendance
+// (i.e. at least one other weekday that week is set, so the blank one is deliberately empty —
+// e.g. a child who only attends Tue/Thu/Fri). If every weekday is blank, the pattern simply
+// hasn't been entered yet — there's no evidence the child doesn't attend, so a real dated
+// suspension should still show 'S' across the week rather than disappearing entirely.
+function weekPatternUnknown(student, weekMon) {
+  if (!weekMon) return false;
+  return ['mon', 'tue', 'wed', 'thu', 'fri'].every((day, di) => !dayValueForDate(student, day, isoAddDays(weekMon, di)));
+}
+
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   let dt = new Date(d);
@@ -778,7 +788,9 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
       // Only show 'S' on days the child is actually scheduled to attend (stored F/H/S) — a
       // suspension shouldn't invent an attendance day that was never there in the first place
       // (e.g. Althea only attends Tue/Thu/Fri; her Wed cell must stay blank during a suspension).
-      return suspended ? (stored ? 'S' : '') : stored;
+      // But if the whole week's pattern is blank (not yet entered, not "known not to attend"),
+      // fall back to showing 'S' — the suspension is real even if the daily pattern isn't set yet.
+      return suspended ? ((stored || weekPatternUnknown(s, weekMon)) ? 'S' : '') : stored;
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
@@ -2811,9 +2823,12 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         // the child was actually scheduled to attend that day (stored F/H/S) — a suspension must
         // not invent an attendance day that was never there (e.g. a child who only attends
         // Tue/Thu/Fri should still show a blank Wednesday during a suspension, not a stray 'S').
+        // Exception: if the whole week's pattern is blank (never configured, not "known not to
+        // attend"), fall back to showing 'S' anyway — a real dated suspension shouldn't just
+        // vanish because the day pattern hasn't been filled in yet.
         // Suspended cells aren't click-cycled directly; edit or delete the suspension itself (in
         // the student's Holiday suspensions list) to change it.
-        const effective = suspended ? (stored ? 'S' : '') : stored;
+        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
         const locked = suspended || !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
