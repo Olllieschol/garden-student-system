@@ -685,6 +685,27 @@ function isStudentActive(s) {
   return !isIsoDate(s.lastDate) || s.lastDate >= today;
 }
 
+// A "schedule change" ({ effectiveDate, mon, tue, wed, thu, fri }) lets staff set a child's
+// future weekly pattern (e.g. "add Wednesday from 27 Jul") from the student panel without
+// touching what past/current weeks already show — the base mon/tue/wed/thu/fri fields on the
+// student stay exactly as they are for any date before the change kicks in. Returns whichever
+// schedule change is most recently effective on or before the given date, or null if none apply
+// yet (meaning the base pattern is still in force).
+function scheduleChangeForDate(student, dateIso) {
+  const changes = student.scheduleChanges || [];
+  let best = null;
+  for (const c of changes) {
+    if (c.effectiveDate && c.effectiveDate <= dateIso && (!best || c.effectiveDate > best.effectiveDate)) best = c;
+  }
+  return best;
+}
+
+function dayValueForDate(student, day, dateIso) {
+  if (!dateIso) return student[day] || '';
+  const change = scheduleChangeForDate(student, dateIso);
+  return change ? (change[day] || '') : (student[day] || '');
+}
+
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   let dt = new Date(d);
@@ -746,7 +767,7 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
-      const stored = s[day] || '';
+      const stored = dayValueForDate(s, day, iso);
       // Only show 'S' on days the child is actually scheduled to attend (stored F/H/S) — a
       // suspension shouldn't invent an attendance day that was never there in the first place
       // (e.g. Althea only attends Tue/Thu/Fri; her Wed cell must stay blank during a suspension).
@@ -779,11 +800,12 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     const present = students.filter(s => {
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
       if (suspended) return false;
-      return s[day] === 'F' || s[day] === 'H';
+      const v = dayValueForDate(s, day, iso);
+      return v === 'F' || v === 'H';
     });
     return {
-      full: present.filter(s => s[day] === 'F').length,
-      half: present.filter(s => s[day] === 'H').length,
+      full: present.filter(s => dayValueForDate(s, day, iso) === 'F').length,
+      half: present.filter(s => dayValueForDate(s, day, iso) === 'H').length,
       lunch: present.filter(s => s.lunch === 'yes').length,
     };
   });
@@ -1033,7 +1055,7 @@ const CSV_FLAT_COLS = [
   'foodAllergiesYesNo','foodAllergiesDetails','epipen',
   'hasMedicalFlag','hasLastDayFlag',
 ];
-const CSV_JSON_COLS = ['dietaryFlags','suspensions','siblings','prepay','parent1','parent2','nanny','doctor'];
+const CSV_JSON_COLS = ['dietaryFlags','suspensions','scheduleChanges','siblings','prepay','parent1','parent2','nanny','doctor'];
 const CSV_ALL_COLS = [...CSV_FLAT_COLS, ...CSV_JSON_COLS];
 
 function csvCell(v) {
@@ -1089,7 +1111,7 @@ function parseGardenBackupCSV(text) {
       if (obj[col]) {
         try { obj[col] = JSON.parse(obj[col]); } catch { obj[col] = col.endsWith('s') ? [] : null; }
       } else {
-        obj[col] = col === 'dietaryFlags' || col === 'suspensions' || col === 'siblings' ? [] : null;
+        obj[col] = col === 'dietaryFlags' || col === 'suspensions' || col === 'scheduleChanges' || col === 'siblings' ? [] : null;
       }
     });
     // Coerce types
@@ -2060,8 +2082,8 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       if (!dayIso) return true;
       return !s.suspensions?.some(sus => sus.start <= dayIso && sus.end >= dayIso);
     });
-    const f = activeNotSuspended.filter(s => s[day] === 'F').length;
-    const h = activeNotSuspended.filter(s => s[day] === 'H').length;
+    const f = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'F').length;
+    const h = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'H').length;
     return { day, f, h, total: f + h };
   });
 
@@ -2501,6 +2523,96 @@ function SectionDivider({ label, count, colour }) {
   );
 }
 
+// Lets staff set a future change to a child's weekly F/H/S pattern (e.g. "add Wednesday from 27
+// Jul") without touching what past/current weeks already show. Mirrors SuspensionSection's
+// dated-list UI; the main grid (StudentRow) and the printable sheet read scheduleChanges via
+// dayValueForDate() so a change only takes effect for dates on/after its effectiveDate.
+function ScheduleChangeSection({ student, onUpdate }) {
+  const [adding, setAdding] = useState(false);
+  const [editIdx, setEditIdx] = useState(null);
+  const [effectiveDate, setEffectiveDate] = useState('');
+  const [days, setDays] = useState({ mon: '', tue: '', wed: '', thu: '', fri: '' });
+  const raw = student.scheduleChanges || [];
+  const changes = raw.slice().sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  const todayIso = localIso(new Date());
+
+  const openAdd = () => {
+    setEditIdx(null);
+    setEffectiveDate('');
+    setDays({
+      mon: dayValueForDate(student, 'mon', todayIso),
+      tue: dayValueForDate(student, 'tue', todayIso),
+      wed: dayValueForDate(student, 'wed', todayIso),
+      thu: dayValueForDate(student, 'thu', todayIso),
+      fri: dayValueForDate(student, 'fri', todayIso),
+    });
+    setAdding(true);
+  };
+  const openEdit = (c) => {
+    setEditIdx(raw.indexOf(c));
+    setEffectiveDate(c.effectiveDate);
+    setDays({ mon: c.mon || '', tue: c.tue || '', wed: c.wed || '', thu: c.thu || '', fri: c.fri || '' });
+    setAdding(true);
+  };
+  const cancel = () => { setAdding(false); setEditIdx(null); setEffectiveDate(''); };
+  const cycleDay = (key) => setDays(d => ({ ...d, [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[d[key] || ''] }));
+  const save = () => {
+    if (!effectiveDate) return;
+    const entry = { effectiveDate, ...days };
+    const updated = editIdx !== null ? raw.map((c, i) => i === editIdx ? entry : c) : [...raw, entry];
+    onUpdate({ scheduleChanges: updated });
+    cancel();
+  };
+  const del = (c) => onUpdate({ scheduleChanges: raw.filter(x => x !== c) });
+
+  return (
+    <Section title={`Scheduled changes  ${changes.length}`}>
+      {changes.map((c, i) => (
+        <div key={i} className="text-xs py-1.5 border-b last:border-0 flex items-center justify-between gap-2" style={{ color: 'var(--ink-soft)', borderColor: 'var(--line-soft)' }}>
+          <span>
+            <span className="font-mono mr-2 opacity-60">{i + 1}.</span>
+            From {shortDate(c.effectiveDate)}: {['mon', 'tue', 'wed', 'thu', 'fri'].map((k, di) => `${['M', 'T', 'W', 'T', 'F'][di]}${c[k] || '·'}`).join(' ')}
+          </span>
+          <div className="flex gap-1 shrink-0">
+            <button onClick={() => openEdit(c)} className="p-0.5 rounded hover:bg-stone-100 transition" title="Edit"><Edit3 size={10} /></button>
+            <button onClick={() => del(c)} className="p-0.5 rounded hover:bg-red-50 text-red-400 transition" title="Delete"><Trash2 size={10} /></button>
+          </div>
+        </div>
+      ))}
+      {changes.length === 0 && !adding && <div className="text-xs italic" style={{ color: 'var(--ink-faint)' }}>No upcoming changes</div>}
+      {adding ? (
+        <div className="mt-2 flex flex-col gap-2">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--ink-faint)' }}>Effective from</label>
+            <input type="date" value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} className="w-full text-xs border rounded px-2 py-1.5" style={{ borderColor: 'var(--line)' }} />
+          </div>
+          <div className="flex gap-1">
+            {['mon', 'tue', 'wed', 'thu', 'fri'].map((key, i) => {
+              const v = days[key];
+              return (
+                <div key={key} className="flex-1 text-center">
+                  <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{['M', 'T', 'W', 'T', 'F'][i]}</div>
+                  <button onClick={() => cycleDay(key)} className={`h-9 w-full rounded flex items-center justify-center text-sm font-mono font-medium ${v === 'F' ? 'bg-emerald-100 text-emerald-900' : v === 'H' ? 'bg-amber-100 text-amber-900' : v === 'S' ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-300'}`}>{v || '·'}</button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={!effectiveDate} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>
+              {editIdx !== null ? 'Save changes' : 'Add'}
+            </button>
+            <button onClick={cancel} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={openAdd} className="mt-2 w-full py-1.5 rounded border border-dashed text-xs flex items-center justify-center gap-1.5 hover:bg-stone-50 transition" style={{ borderColor: 'var(--line)', color: 'var(--ink-soft)' }}>
+          <Plus size={11} /> Add schedule change
+        </button>
+      )}
+    </Section>
+  );
+}
+
 function SuspensionSection({ student, onUpdate }) {
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
@@ -2688,7 +2800,8 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
-        const stored = student[day] || '';
+        const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
+        const stored = dayValueForDate(student, day, dayIso);
         // A day inside an official Holiday Suspension range displays (and behaves) as 'S' only if
         // the child was actually scheduled to attend that day (stored F/H/S) — a suspension must
         // not invent an attendance day that was never there (e.g. a child who only attends
@@ -2696,12 +2809,13 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         // Suspended cells aren't click-cycled directly; edit or delete the suspension itself (in
         // the student's Holiday suspensions list) to change it.
         const effective = suspended ? (stored ? 'S' : '') : stored;
+        const locked = suspended || !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
-              onClick={() => { if (!suspended) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] }); }}
-              title={suspended ? 'Holiday suspension' : undefined}
-              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${suspended ? 'cursor-default' : ''}`}>
+              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] }); }}
+              title={suspended ? 'Holiday suspension' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
               {effective || '·'}
             </button>
           </td>
@@ -3029,6 +3143,7 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             <TriStateBox value={student.socialMedia} onClick={() => u({ socialMedia: cycleTriState(student.socialMedia) })} />
           </div>
         </Section>
+        <ScheduleChangeSection student={student} onUpdate={u} />
         <SuspensionSection student={student} onUpdate={u} />
         <Section title="Billing">
           <EditableRow label="Bond paid" value={student.bondPaid} onSave={v => u({ bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} />
