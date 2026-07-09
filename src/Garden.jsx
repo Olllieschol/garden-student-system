@@ -1623,7 +1623,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const cycleDay = (id, day) => {
     const s = students.find(x => x.id === id);
     if (!s) return;
-    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[s[day] || ''] });
+    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': '' }[s[day] || ''] ?? '' });
   };
 
   const handleParsedConfirm = (p) => {
@@ -2560,7 +2560,7 @@ function ScheduleChangeSection({ student, onUpdate }) {
     setAdding(true);
   };
   const cancel = () => { setAdding(false); setEditIdx(null); setEffectiveDate(''); };
-  const cycleDay = (key) => setDays(d => ({ ...d, [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[d[key] || ''] }));
+  const cycleDay = (key) => setDays(d => ({ ...d, [key]: { '': 'F', 'F': 'H', 'H': '' }[d[key] || ''] ?? '' }));
   const save = () => {
     if (!effectiveDate) return;
     const entry = { effectiveDate, ...days };
@@ -2818,7 +2818,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
-              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] }); }}
+              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': '' }[stored] ?? '' }); }}
               title={suspended ? 'Holiday suspension' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
               className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
               {effective || '·'}
@@ -3126,7 +3126,7 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             {['M','T','W','T','F'].map((d, i) => {
               const key = ['mon','tue','wed','thu','fri'][i];
               const v = student[key];
-              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[v || ''] });
+              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': '' }[v || ''] ?? '' });
               return (
                 <div key={i} className="flex-1 text-center">
                   <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{d}</div>
@@ -4939,7 +4939,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
   const [lunch, setLunch] = useState('');
   const [socialMedia, setSocialMedia] = useState('');
 
-  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[prev[d] || ''] }));
+  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': '' }[prev[d] || ''] ?? '' }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(27,26,23,0.5)' }}>
