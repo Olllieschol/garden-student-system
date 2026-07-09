@@ -1021,7 +1021,7 @@ const CSV_FLAT_COLS = [
   'dob','nationality','parents','phone','email',
   'mon','tue','wed','thu','fri','lunch','socialMedia','dietary',
   'note','originalStart','returningDate','lastDate','lengthOfStay',
-  'bondPaid','bondAmount','periodFrom','periodUntil',
+  'bondPaid','bondReturned','bondAmount','periodFrom','periodUntil',
   'invoiceStatus','invoiceNote',
   'transitionTo','transitionDate',
   'archived','archivedAt',
@@ -2252,7 +2252,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
 
       <div className="rounded-b-lg border overflow-hidden" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
         <div ref={bottomRef} className="ss-table-container overflow-x-auto">
-          <table className="text-sm" style={{ minWidth: '2230px' }}>
+          <table className="text-sm" style={{ minWidth: '2340px' }}>
             <colgroup>
               <col style={{ width: '40px' }} />
               <col style={{ width: '240px' }} />
@@ -2271,6 +2271,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               <col style={{ width: '55px' }} />
               <col style={{ width: '55px' }} />
               <col style={{ width: '70px' }} />
+              <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
@@ -2300,6 +2301,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <th className="text-center font-medium px-2 py-2.5">Social media</th>
                 <th className="text-center font-medium px-2 py-2.5">Dietary</th>
                 <th className="text-left font-medium px-3 py-2.5">Bond paid</th>
+                <th className="text-left font-medium px-3 py-2.5">Bond returned</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid from</th>
                 <th className="text-left font-medium px-3 py-2.5">Paid until</th>
                 <th className="text-left font-medium px-3 py-2.5">Invoice</th>
@@ -2718,6 +2720,9 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.bondPaid} onSave={v => onUpdate(student.id, { bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} mono />
       </td>
       <td className="px-2 py-2 text-xs">
+        <EditableCell value={student.bondReturned} onSave={v => onUpdate(student.id, { bondReturned: v })} placeholder="— add" display={student.bondReturned ? shortDate(student.bondReturned) : ''} mono />
+      </td>
+      <td className="px-2 py-2 text-xs">
         <EditableCell value={student.periodFrom} onSave={v => onUpdate(student.id, { periodFrom: v })} type="date" display={student.periodFrom ? shortDate(student.periodFrom) : ''} mono />
       </td>
       <td className="px-2 py-2 text-xs">
@@ -3027,6 +3032,7 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
         <SuspensionSection student={student} onUpdate={u} />
         <Section title="Billing">
           <EditableRow label="Bond paid" value={student.bondPaid} onSave={v => u({ bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} />
+          <EditableRow label="Bond returned" value={student.bondReturned} onSave={v => u({ bondReturned: v })} display={student.bondReturned ? shortDate(student.bondReturned) : ''} />
           <EditableRow label="Paid from" value={student.periodFrom} onSave={v => u({ periodFrom: v })} type="date" display={student.periodFrom ? shortDate(student.periodFrom) : ''} />
           <EditableRow label="Paid until" value={student.periodUntil} onSave={v => u({ periodUntil: v })} type="date" display={student.periodUntil ? shortDate(student.periodUntil) : ''} />
           <EditableRow label="Invoice note" value={student.invoiceNote} onSave={v => u({ invoiceNote: v })} />
