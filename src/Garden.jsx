@@ -713,16 +713,6 @@ function dayValueForDate(student, day, dateIso) {
   return change ? (change[day] || '') : (student[day] || '');
 }
 
-// A suspension should only hide 'S' on a blank day when that blank is *known* non-attendance
-// (i.e. at least one other weekday that week is set, so the blank one is deliberately empty —
-// e.g. a child who only attends Tue/Thu/Fri). If every weekday is blank, the pattern simply
-// hasn't been entered yet — there's no evidence the child doesn't attend, so a real dated
-// suspension should still show 'S' across the week rather than disappearing entirely.
-function weekPatternUnknown(student, weekMon) {
-  if (!weekMon) return false;
-  return ['mon', 'tue', 'wed', 'thu', 'fri'].every((day, di) => !dayValueForDate(student, day, isoAddDays(weekMon, di)));
-}
-
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   let dt = new Date(d);
@@ -781,17 +771,9 @@ function DietaryBox({ value, onClick, className = 'w-5 h-5' }) {
 function openPrintableAttendance({ className, ageRange, weekLabel, students, weekMon }) {
   const dayIso = (di) => weekMon ? isoAddDays(weekMon, di) : null;
   const rows = students.map((s, i) => {
-    const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
-      const iso = dayIso(di);
-      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
-      const stored = dayValueForDate(s, day, iso);
-      // Only show 'S' on days the child is actually scheduled to attend (stored F/H/S) — a
-      // suspension shouldn't invent an attendance day that was never there in the first place
-      // (e.g. Althea only attends Tue/Thu/Fri; her Wed cell must stay blank during a suspension).
-      // But if the whole week's pattern is blank (not yet entered, not "known not to attend"),
-      // fall back to showing 'S' — the suspension is real even if the daily pattern isn't set yet.
-      return suspended ? ((stored || weekPatternUnknown(s, weekMon)) ? 'S' : '') : stored;
-    });
+    // Prints exactly what's stored on the day cell — the grid is a plain manual F/H/S/blank
+    // record, independent of the Holiday Suspensions list (dates/note/count are separate).
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => dayValueForDate(s, day, dayIso(di)));
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
     const note = [s.note, s.holidaySuspension].filter(Boolean).map(escapeHtml).join('<br>');
@@ -817,8 +799,6 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
     const iso = dayIso(di);
     const present = students.filter(s => {
-      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
-      if (suspended) return false;
       const v = dayValueForDate(s, day, iso);
       return v === 'F' || v === 'H';
     });
@@ -1406,18 +1386,6 @@ function GardenApp({ initialCentre = 'canggu' }) {
         if (v === false || v === undefined || v === null) return '';
         return v;
       };
-      // 'S' used to be a directly-clickable state on the weekday cells (blank -> F -> H -> S ->
-      // blank), before that was removed because it let 'S' get set as a permanent value with no
-      // start/end date — indistinguishable on screen from a real dated Holiday Suspension, so any
-      // day stuck on it this way showed "suspended" forever, in every week, regardless of any
-      // actual suspension range. It's no longer possible to create this via the UI, but existing
-      // students who already had it are cleaned up here automatically, once, on every load — a
-      // day literally storing 'S' is blanked back out (not touched if it's blank, F, or H, so a
-      // student's real known attendance days are always left exactly as they are).
-      let fakeSDayMigrated = false;
-      const fakeSDayNames = [];
-      const dayFields = ['mon', 'tue', 'wed', 'thu', 'fri'];
-
       const backfilledStudents = migratedStudents.map(s => {
         let out = s;
         if ((s.suspensions?.length || 0) > 0 && !String(s.holidaySuspension || '').trim()) {
@@ -1428,23 +1396,13 @@ function GardenApp({ initialCentre = 'canggu' }) {
           triStateMigrated = true;
           out = { ...out, lunch: toTriState(out.lunch), socialMedia: toTriState(out.socialMedia) };
         }
-        if (dayFields.some(d => out[d] === 'S')) {
-          fakeSDayMigrated = true;
-          fakeSDayNames.push(out.name);
-          const cleared = {};
-          dayFields.forEach(d => { if (out[d] === 'S') cleared[d] = ''; });
-          out = { ...out, ...cleared };
-        }
         return out;
       });
 
-      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated || fakeSDayMigrated) && supabase) {
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated) && supabase) {
         // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill,
-        // lunch/socialMedia tri-state migration, fake-S day cleanup) back to DB
+        // lunch/socialMedia tri-state migration) back to DB
         await supabase.from('students').upsert(backfilledStudents.map(s => ({ id: String(s.id), data: s })));
-      }
-      if (fakeSDayMigrated) {
-        console.info('[S-day Migration] Cleared stray permanent \'S\' weekday values on:', fakeSDayNames);
       }
       if (migrationLog.length > 0) {
         const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
@@ -1743,7 +1701,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const cycleDay = (id, day) => {
     const s = students.find(x => x.id === id);
     if (!s) return;
-    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': '' }[s[day] || ''] ?? '' });
+    updateStudent(id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[s[day] || ''] ?? '' });
   };
 
   const handleParsedConfirm = (p) => {
@@ -2206,15 +2164,12 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
-  // Daily totals — count F and H per day, excluding students on suspension that day
+  // Daily totals — count whatever's actually stored as F or H per day (S and blank excluded
+  // naturally, same as the grid itself — no separate suspension lookup needed).
   const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
     const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
-    const activeNotSuspended = active.filter(s => {
-      if (!dayIso) return true;
-      return !s.suspensions?.some(sus => sus.start <= dayIso && sus.end >= dayIso);
-    });
-    const f = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'F').length;
-    const h = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'H').length;
+    const f = active.filter(s => dayValueForDate(s, day, dayIso) === 'F').length;
+    const h = active.filter(s => dayValueForDate(s, day, dayIso) === 'H').length;
     return { day, f, h, total: f + h };
   });
 
@@ -2684,7 +2639,7 @@ function ScheduleChangeSection({ student, onUpdate }) {
     setAdding(true);
   };
   const cancel = () => { setAdding(false); setEditIdx(null); setEffectiveDate(''); };
-  const cycleDay = (key) => setDays(d => ({ ...d, [key]: { '': 'F', 'F': 'H', 'H': '' }[d[key] || ''] ?? '' }));
+  const cycleDay = (key) => setDays(d => ({ ...d, [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[d[key] || ''] ?? '' }));
   const save = () => {
     if (!effectiveDate) return;
     const entry = { effectiveDate, ...days };
@@ -2926,25 +2881,19 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       </td>
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
-        const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // A day inside an official Holiday Suspension range displays (and behaves) as 'S' only if
-        // the child was actually scheduled to attend that day (stored F/H/S) — a suspension must
-        // not invent an attendance day that was never there (e.g. a child who only attends
-        // Tue/Thu/Fri should still show a blank Wednesday during a suspension, not a stray 'S').
-        // Exception: if the whole week's pattern is blank (never configured, not "known not to
-        // attend"), fall back to showing 'S' anyway — a real dated suspension shouldn't just
-        // vanish because the day pattern hasn't been filled in yet.
-        // Suspended cells aren't click-cycled directly; edit or delete the suspension itself (in
-        // the student's Holiday suspensions list) to change it.
-        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
-        const locked = suspended || !!scheduleChange;
+        // The day cell is a plain manual F/H/S/blank cycle — it shows and edits exactly what's
+        // stored, nothing computed or auto-derived from the Holiday Suspensions list (that stays
+        // a separate, independent record: dated ranges, the note, the yearly count). Keeping the
+        // two decoupled means clicking always does exactly what it looks like it does.
+        const effective = stored;
+        const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
-              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': '' }[stored] ?? '' }); }}
-              title={suspended ? 'Holiday suspension' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
+              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] ?? '' }); }}
+              title={scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
               className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
               {effective || '·'}
             </button>
@@ -3251,7 +3200,7 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
             {['M','T','W','T','F'].map((d, i) => {
               const key = ['mon','tue','wed','thu','fri'][i];
               const v = student[key];
-              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': '' }[v || ''] ?? '' });
+              const cycle = () => u({ [key]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[v || ''] ?? '' });
               return (
                 <div key={i} className="flex-1 text-center">
                   <div className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--ink-faint)' }}>{d}</div>
@@ -5148,7 +5097,7 @@ function AddStudentModal({ currentClassId, onClose, onSave }) {
   const [lunch, setLunch] = useState('');
   const [socialMedia, setSocialMedia] = useState('');
 
-  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': '' }[prev[d] || ''] ?? '' }));
+  const cycleDay = (d) => setDays(prev => ({ ...prev, [d]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[prev[d] || ''] ?? '' }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(27,26,23,0.5)' }}>
