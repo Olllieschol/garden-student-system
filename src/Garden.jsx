@@ -4787,69 +4787,122 @@ function AllStudentsView({ students, onSelectStudent }) {
 // FORECAST
 // ============================================================
 
+// Real projected headcount for one class in one week — a student counts if their Started date is
+// on or before that week's Friday and their Last day (if any) is on or after that week's Monday
+// (same rule ClassView uses for "active in this week"), attributed to whichever class they'll
+// actually be in that week: their normal class, unless a scheduled Transition has already taken
+// effect by that week's Friday, in which case they count toward the destination class instead.
+function classCountForWeek(students, classId, weekMon, weekFri) {
+  return students.filter(s => {
+    if (!['enrolled', 'suspended', 'extended_holiday'].includes(s.status)) return false;
+    if (isIsoDate(s.originalStart) && weekFri && s.originalStart > weekFri) return false;
+    if (isIsoDate(s.lastDate) && weekMon && s.lastDate < weekMon) return false;
+    const transitioned = s.transitionTo && isIsoDate(s.transitionDate) && weekFri && s.transitionDate <= weekFri;
+    return (transitioned ? s.transitionTo : s.classId) === classId;
+  }).length;
+}
+
 function ForecastView({ students }) {
-  const { classes } = useClasses();
-  // Generate a 12-week forecast grid (instead of full 53) for demo readability
-  const weeks = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date('2026-05-04');
-    d.setDate(d.getDate() + i * 7);
-    return { label: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), num: 19 + i };
-  });
+  const { classes, updateClass } = useClasses();
+  const scrollRef = useRef(null);
+  const [editingCell, setEditingCell] = useState(null); // `${classId}:${weekId}`
+  const [editValue, setEditValue] = useState('');
+
+  const scrollToWeek = (behavior) => {
+    const el = scrollRef.current?.querySelector(`[data-week-idx="${TODAY_WEEK_IDX}"]`);
+    el?.scrollIntoView({ behavior, inline: 'center', block: 'nearest' });
+  };
+  useEffect(() => { scrollToWeek('instant'); }, []);
+
+  const openEdit = (classId, weekId, computed) => {
+    const cls = classes.find(c => c.id === classId);
+    const existing = cls?.forecastOverrides?.[weekId];
+    setEditingCell(`${classId}:${weekId}`);
+    setEditValue(existing !== undefined ? String(existing) : String(computed));
+  };
+  const saveEdit = (classId, weekId, computed) => {
+    const cls = classes.find(c => c.id === classId);
+    const overrides = { ...(cls?.forecastOverrides || {}) };
+    const n = parseInt(editValue, 10);
+    if (!isNaN(n) && n >= 0 && n !== computed) overrides[weekId] = n;
+    else delete overrides[weekId];
+    updateClass(classId, { forecastOverrides: overrides });
+    setEditingCell(null);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto px-8 pt-7 pb-16">
-      <div className="font-display text-4xl mb-1">Enrolment forecast</div>
-      <div className="text-sm mb-6" style={{ color: 'var(--ink-soft)' }}>Projected counts per class · accounts for known returning & leaving dates</div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="font-display text-4xl">Enrolment forecast</div>
+        <button onClick={() => scrollToWeek('smooth')} className="text-xs px-3 py-1.5 rounded-md border hover:bg-white transition" style={{ borderColor: 'var(--line)' }}>Current week</button>
+      </div>
+      <div className="text-sm mb-6" style={{ color: 'var(--ink-soft)' }}>Projected counts per class · computed from each student's start, last day, and transition dates — click any cell to override, scroll sideways for more weeks</div>
 
-      <div className="rounded-lg border overflow-x-auto" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
-        <table className="w-full text-xs">
+      <div ref={scrollRef} className="rounded-lg border overflow-x-auto" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
+        <table className="text-xs" style={{ minWidth: `${170 + WEEKS.length * 72}px` }}>
           <thead>
             <tr className="border-b text-xs uppercase tracking-wider" style={{ borderColor: 'var(--line)', background: 'var(--line-soft)', color: 'var(--ink-faint)' }}>
-              <th className="text-left font-medium px-3 py-2.5 sticky left-0" style={{ background: 'var(--line-soft)' }}>Class</th>
-              <th className="text-center font-medium px-2 py-2.5">Cap</th>
-              {weeks.map(w => (
-                <th key={w.num} className="text-center font-medium px-2 py-2.5">
-                  <div className="font-mono opacity-60">W{w.num}</div>
-                  <div className="font-normal">{w.label}</div>
+              <th className="text-left font-medium px-3 py-2.5 sticky-col-header" style={{ left: 0 }}>Class</th>
+              <th className="text-center font-medium px-2 py-2.5 sticky-col-header-last" style={{ left: '110px' }}>Cap</th>
+              {WEEKS.map((w, wi) => (
+                <th key={w.id} data-week-idx={wi} className="text-center font-medium px-2 py-2.5" style={wi === TODAY_WEEK_IDX ? { background: 'var(--accent-soft)', color: 'var(--accent)' } : undefined}>
+                  <div className="font-mono opacity-60">W{wi + 1}</div>
+                  <div className="font-normal whitespace-nowrap">{w.label}</div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {classes.map(c => {
-              const base = students.filter(s => s.classId === c.id && ['enrolled','suspended'].includes(s.status)).length;
-              return (
-                <tr key={c.id} className="border-b" style={{ borderColor: 'var(--line-soft)' }}>
-                  <td className="px-3 py-2 sticky left-0 font-medium" style={{ background: 'var(--paper)' }}>
-                    <span className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: c.dot }} />
-                      {c.name}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--ink-faint)' }}>{c.capacity}</td>
-                  {weeks.map((w, wi) => {
-                    // Simulate some variation
-                    const variation = Math.sin((c.id.charCodeAt(0) + wi) * 0.7) * 2;
-                    const n = Math.max(0, Math.round(base + variation));
-                    const pct = (n / c.capacity) * 100;
-                    const bg = pct >= 100 ? '#FECACA' : pct >= 85 ? '#FED7AA' : pct >= 60 ? '#D1FAE5' : 'transparent';
-                    return (
-                      <td key={wi} className="px-2 py-2 text-center font-mono" style={{ background: bg }}>{n}</td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-            <tr className="font-medium" style={{ background: 'var(--accent-soft)' }}>
-              <td className="px-3 py-2 sticky left-0" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>TOTAL</td>
-              <td className="px-2 py-2 text-center font-mono" style={{ color: 'var(--accent)' }}>{classes.reduce((a,c) => a+c.capacity, 0)}</td>
-              {weeks.map((w, wi) => {
-                const total = classes.reduce((a,c) => {
-                  const base = students.filter(s => s.classId === c.id && ['enrolled','suspended'].includes(s.status)).length;
-                  const variation = Math.sin((c.id.charCodeAt(0) + wi) * 0.7) * 2;
-                  return a + Math.max(0, Math.round(base + variation));
+            {classes.map(c => (
+              <tr key={c.id} className="border-b" style={{ borderColor: 'var(--line-soft)' }}>
+                <td className="px-3 py-2 sticky-col font-medium" style={{ left: 0, background: 'var(--paper)' }}>
+                  <span className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: c.dot }} />
+                    {c.name}
+                  </span>
+                </td>
+                <td className="px-2 py-2 text-center font-mono sticky-col-last" style={{ left: '110px', color: 'var(--ink-faint)', background: 'var(--paper)' }}>{c.capacity}</td>
+                {WEEKS.map((w, wi) => {
+                  const computed = classCountForWeek(students, c.id, w.monDate, w.friDate);
+                  const override = c.forecastOverrides?.[w.id];
+                  const n = override !== undefined ? override : computed;
+                  const pct = (n / c.capacity) * 100;
+                  const bg = pct >= 100 ? '#FECACA' : pct >= 85 ? '#FED7AA' : pct >= 60 ? '#D1FAE5' : 'transparent';
+                  const cellKey = `${c.id}:${w.id}`;
+                  return (
+                    <td key={w.id} className="px-1 py-1 text-center font-mono" style={{ background: bg }}>
+                      {editingCell === cellKey ? (
+                        <input
+                          autoFocus type="number" min="0" value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          onBlur={() => saveEdit(c.id, w.id, computed)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveEdit(c.id, w.id, computed); if (e.key === 'Escape') setEditingCell(null); }}
+                          className="w-12 text-center rounded border px-1 py-0.5 text-xs"
+                          style={{ borderColor: 'var(--accent)' }}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => openEdit(c.id, w.id, computed)}
+                          title={override !== undefined ? `Overridden — computed value is ${computed}. Click to change or clear.` : 'Click to override'}
+                          className="w-full py-1 hover:underline decoration-dotted">
+                          {n}{override !== undefined && <span className="ml-0.5" style={{ color: 'var(--accent)' }}>*</span>}
+                        </button>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            <tr className="font-medium">
+              <td className="px-3 py-2 sticky-col" style={{ left: 0, background: 'var(--accent-soft)', color: 'var(--accent)' }}>TOTAL</td>
+              <td className="px-2 py-2 text-center font-mono sticky-col-last" style={{ left: '110px', color: 'var(--accent)', background: 'var(--accent-soft)' }}>{classes.reduce((a, c) => a + c.capacity, 0)}</td>
+              {WEEKS.map(w => {
+                const total = classes.reduce((a, c) => {
+                  const computed = classCountForWeek(students, c.id, w.monDate, w.friDate);
+                  const override = c.forecastOverrides?.[w.id];
+                  return a + (override !== undefined ? override : computed);
                 }, 0);
-                return <td key={wi} className="px-2 py-2 text-center font-mono" style={{ color: 'var(--accent)' }}>{total}</td>;
+                return <td key={w.id} className="px-2 py-2 text-center font-mono" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{total}</td>;
               })}
             </tr>
           </tbody>
@@ -4860,6 +4913,7 @@ function ForecastView({ students }) {
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: '#D1FAE5' }} /> 60–85% full</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: '#FED7AA' }} /> 85–100% full</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ background: '#FECACA' }} /> Over capacity</span>
+        <span className="flex items-center gap-1.5"><span style={{ color: 'var(--accent)' }}>*</span> manually overridden</span>
       </div>
     </div>
   );
