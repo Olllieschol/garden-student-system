@@ -713,6 +713,16 @@ function dayValueForDate(student, day, dateIso) {
   return change ? (change[day] || '') : (student[day] || '');
 }
 
+// A suspension should only hide 'S' on a blank day when that blank is *known* non-attendance
+// (i.e. at least one other weekday that week is set, so the blank one is deliberately empty —
+// e.g. a child who only attends Tue/Thu/Fri). If every weekday is blank, the pattern simply
+// hasn't been entered yet — there's no evidence the child doesn't attend, so a real dated
+// suspension should still show 'S' across the week rather than disappearing entirely.
+function weekPatternUnknown(student, weekMon) {
+  if (!weekMon) return false;
+  return ['mon', 'tue', 'wed', 'thu', 'fri'].every((day, di) => !dayValueForDate(student, day, isoAddDays(weekMon, di)));
+}
+
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   let dt = new Date(d);
@@ -771,9 +781,15 @@ function DietaryBox({ value, onClick, className = 'w-5 h-5' }) {
 function openPrintableAttendance({ className, ageRange, weekLabel, students, weekMon }) {
   const dayIso = (di) => weekMon ? isoAddDays(weekMon, di) : null;
   const rows = students.map((s, i) => {
-    // Prints exactly what's stored on the day cell — the grid is a plain manual F/H/S/blank
-    // record, independent of the Holiday Suspensions list (dates/note/count are separate).
-    const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => dayValueForDate(s, day, dayIso(di)));
+    // Same rule as the on-screen grid: a suspended day prints as 'S', including over a normal
+    // F/H attendance day — a blank day only stays blank if it's known non-attendance (some other
+    // day that week is set); an entirely unconfigured week defaults to 'S' during a suspension.
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
+      const iso = dayIso(di);
+      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
+      const stored = dayValueForDate(s, day, iso);
+      return suspended ? ((stored || weekPatternUnknown(s, weekMon)) ? 'S' : '') : stored;
+    });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
     const note = [s.note, s.holidaySuspension].filter(Boolean).map(escapeHtml).join('<br>');
@@ -799,6 +815,8 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
     const iso = dayIso(di);
     const present = students.filter(s => {
+      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
+      if (suspended) return false;
       const v = dayValueForDate(s, day, iso);
       return v === 'F' || v === 'H';
     });
@@ -2164,12 +2182,16 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const capWarn = enrolledCount >= currentClass.capacity;
   const capacityPct = (enrolledCount / currentClass.capacity) * 100;
 
-  // Daily totals — count whatever's actually stored as F or H per day (S and blank excluded
-  // naturally, same as the grid itself — no separate suspension lookup needed).
+  // Daily totals — count F and H per day, excluding students on suspension that day (the grid
+  // shows their normal F/H as 'S' for a suspended day, so they must not also count as present).
   const totals = ['mon','tue','wed','thu','fri'].map((day, di) => {
     const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
-    const f = active.filter(s => dayValueForDate(s, day, dayIso) === 'F').length;
-    const h = active.filter(s => dayValueForDate(s, day, dayIso) === 'H').length;
+    const activeNotSuspended = active.filter(s => {
+      if (!dayIso) return true;
+      return !s.suspensions?.some(sus => sus.start <= dayIso && sus.end >= dayIso);
+    });
+    const f = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'F').length;
+    const h = activeNotSuspended.filter(s => dayValueForDate(s, day, dayIso) === 'H').length;
     return { day, f, h, total: f + h };
   });
 
@@ -2881,13 +2903,18 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       </td>
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
+        const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // The day cell is a plain manual F/H/S/blank cycle — it shows and edits exactly what's
-        // stored, nothing computed or auto-derived from the Holiday Suspensions list (that stays
-        // a separate, independent record: dated ranges, the note, the yearly count). Keeping the
-        // two decoupled means clicking always does exactly what it looks like it does.
-        const effective = stored;
+        // A day inside a dated Holiday Suspension shows 'S' automatically — including on a day
+        // the child normally attends (stored F/H), since that's the whole point of a suspension —
+        // so the suspended week is visible at a glance on the grid, not just in the Holiday
+        // Suspension column text. A blank day only stays blank during a suspension if it's
+        // *known* non-attendance (some other day that week is set, e.g. Althea only attends
+        // Tue/Thu/Fri, so her suspended Wednesday stays blank); if the whole week is unconfigured,
+        // default to 'S' since there's no evidence the child doesn't attend. The cell is still
+        // fully click-cycleable (blank -> F -> H -> S -> blank) like any other.
+        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
         const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
