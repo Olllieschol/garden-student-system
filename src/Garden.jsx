@@ -2798,13 +2798,11 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   const { classes } = useClasses();
   const status = STATUSES[student.status];
   const inv = INVOICE_STATUSES[student.invoiceStatus] || INVOICE_STATUSES.not_sent;
-  // Count suspension weeks used (each range = ceil((end-start+1)/7) weeks, min 1)
-  const susWeeks = (student.suspensions || []).reduce((acc, s) => {
-    if (!s.start || !s.end) return acc;
-    const days = Math.round((new Date(s.end) - new Date(s.start)) / 86400000) + 1;
-    return acc + Math.max(1, Math.ceil(days / 7));
-  }, 0);
-  const susCount = susWeeks;
+  // HS/yr counts how many separate suspension entries have been used this year (capped at 4),
+  // matching the same count shown in the student panel's "Holiday suspensions X/4" and everywhere
+  // else in the app — NOT total suspension weeks, which could make one long suspension alone
+  // look like it used up the whole yearly allowance.
+  const susCount = student.suspensions?.length || 0;
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
