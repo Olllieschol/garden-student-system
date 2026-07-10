@@ -2906,22 +2906,21 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // A blank day inside a dated Holiday Suspension defaults to showing 'S' — unless it's
-        // *known* non-attendance (some other day that week is set, e.g. Althea only attends
-        // Tue/Thu/Fri, so her suspended Wednesday stays blank) — so a fully unconfigured week
-        // still shows the suspension at a glance. But once a real value is stored (F/H/S), it's
-        // always shown exactly as-is, never overwritten to 'S' — otherwise clicking through
-        // F -> H -> S during a suspended week would look like it does nothing, since every
-        // non-blank value would render identically. The blue ring marks "in suspension" instead,
-        // so that's visible without hiding what's actually stored. Cell is always click-cycleable.
-        const effective = stored || (suspended && weekPatternUnknown(student, weekMon) ? 'S' : '');
+        // A day inside a dated Holiday Suspension always shows a plain 'S' — including over a
+        // normal F/H attendance day — so a suspended week is unmistakable at a glance. A blank
+        // day only stays blank during a suspension if it's *known* non-attendance (some other
+        // day that week is set, e.g. Althea only attends Tue/Thu/Fri, so her suspended Wednesday
+        // stays blank); a fully unconfigured week defaults to 'S'. The cell is still fully
+        // click-cycleable and does update the underlying value, but the box will keep showing
+        // 'S' for as long as the day is suspended — by design, kept deliberately simple.
+        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
         const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
               onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] ?? '' }); }}
-              title={suspended ? 'Holiday suspension' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
-              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''} ${suspended ? 'ring-2 ring-blue-300' : ''}`}>
+              title={scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
               {effective || '·'}
             </button>
           </td>
