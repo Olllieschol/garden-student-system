@@ -1406,6 +1406,18 @@ function GardenApp({ initialCentre = 'canggu' }) {
         if (v === false || v === undefined || v === null) return '';
         return v;
       };
+      // 'S' used to be a directly-clickable state on the weekday cells (blank -> F -> H -> S ->
+      // blank), before that was removed because it let 'S' get set as a permanent value with no
+      // start/end date — indistinguishable on screen from a real dated Holiday Suspension, so any
+      // day stuck on it this way showed "suspended" forever, in every week, regardless of any
+      // actual suspension range. It's no longer possible to create this via the UI, but existing
+      // students who already had it are cleaned up here automatically, once, on every load — a
+      // day literally storing 'S' is blanked back out (not touched if it's blank, F, or H, so a
+      // student's real known attendance days are always left exactly as they are).
+      let fakeSDayMigrated = false;
+      const fakeSDayNames = [];
+      const dayFields = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
       const backfilledStudents = migratedStudents.map(s => {
         let out = s;
         if ((s.suspensions?.length || 0) > 0 && !String(s.holidaySuspension || '').trim()) {
@@ -1416,13 +1428,23 @@ function GardenApp({ initialCentre = 'canggu' }) {
           triStateMigrated = true;
           out = { ...out, lunch: toTriState(out.lunch), socialMedia: toTriState(out.socialMedia) };
         }
+        if (dayFields.some(d => out[d] === 'S')) {
+          fakeSDayMigrated = true;
+          fakeSDayNames.push(out.name);
+          const cleared = {};
+          dayFields.forEach(d => { if (out[d] === 'S') cleared[d] = ''; });
+          out = { ...out, ...cleared };
+        }
         return out;
       });
 
-      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated) && supabase) {
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated || fakeSDayMigrated) && supabase) {
         // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill,
-        // lunch/socialMedia tri-state migration) back to DB
+        // lunch/socialMedia tri-state migration, fake-S day cleanup) back to DB
         await supabase.from('students').upsert(backfilledStudents.map(s => ({ id: String(s.id), data: s })));
+      }
+      if (fakeSDayMigrated) {
+        console.info('[S-day Migration] Cleared stray permanent \'S\' weekday values on:', fakeSDayNames);
       }
       if (migrationLog.length > 0) {
         const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
