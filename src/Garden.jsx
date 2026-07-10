@@ -2803,6 +2803,17 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   // look like it used up the whole yearly allowance.
   const susCount = student.suspensions?.length || 0;
 
+  // Frozen at first render for this (student, week) pair — deliberately NOT recomputed as the
+  // student's day values change within the same view. Without freezing this, clicking a single
+  // day cell on a fully-blank student (e.g. filling in Monday for the first time) would
+  // instantly flip every OTHER day from "unknown pattern, default to S" to "known non-attendance,
+  // stay blank" — because the moment Monday gets a real value, the week is no longer entirely
+  // blank. That made one click appear to "randomly remove the rest of the week". Freezing this
+  // per (student, week) means mid-session edits don't retroactively reinterpret sibling cells;
+  // it only re-evaluates on a fresh load or when switching weeks/students.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const patternWasUnknown = useMemo(() => weekPatternUnknown(student, weekMon), [student.id, weekMon]);
+
   const [statusOpen, setStatusOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
   const statusBtnRef = useRef(null);
@@ -2910,10 +2921,10 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         // normal F/H attendance day — so a suspended week is unmistakable at a glance. A blank
         // day only stays blank during a suspension if it's *known* non-attendance (some other
         // day that week is set, e.g. Althea only attends Tue/Thu/Fri, so her suspended Wednesday
-        // stays blank); a fully unconfigured week defaults to 'S'. The cell is still fully
-        // click-cycleable and does update the underlying value, but the box will keep showing
-        // 'S' for as long as the day is suspended — by design, kept deliberately simple.
-        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
+        // stays blank); a fully unconfigured week defaults to 'S'. "Unconfigured" is frozen at
+        // first render (patternWasUnknown, above) rather than recomputed live, so filling in one
+        // day doesn't instantly flip every other blank day's interpretation mid-session.
+        const effective = suspended ? ((stored || patternWasUnknown) ? 'S' : '') : stored;
         const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
