@@ -2383,7 +2383,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
 
       <div className="rounded-b-lg border overflow-hidden" style={{ borderColor: 'var(--line)', background: 'var(--paper)' }}>
         <div ref={bottomRef} className="ss-table-container overflow-x-auto">
-          <table className="text-sm" style={{ minWidth: '2340px' }}>
+          <table className="text-sm" style={{ minWidth: '2410px' }}>
             <colgroup>
               <col style={{ width: '40px' }} />
               <col style={{ width: '240px' }} />
@@ -2406,7 +2406,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
               <col style={{ width: '110px' }} />
-              <col style={{ width: '120px' }} />
+              <col style={{ width: '190px' }} />
               <col style={{ width: '160px' }} />
               <col style={{ width: '260px' }} />
               <col style={{ width: '170px' }} />
@@ -2906,22 +2906,22 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // A day inside a dated Holiday Suspension shows 'S' automatically — including on a day
-        // the child normally attends (stored F/H), since that's the whole point of a suspension —
-        // so the suspended week is visible at a glance on the grid, not just in the Holiday
-        // Suspension column text. A blank day only stays blank during a suspension if it's
+        // A blank day inside a dated Holiday Suspension defaults to showing 'S' — unless it's
         // *known* non-attendance (some other day that week is set, e.g. Althea only attends
-        // Tue/Thu/Fri, so her suspended Wednesday stays blank); if the whole week is unconfigured,
-        // default to 'S' since there's no evidence the child doesn't attend. The cell is still
-        // fully click-cycleable (blank -> F -> H -> S -> blank) like any other.
-        const effective = suspended ? ((stored || weekPatternUnknown(student, weekMon)) ? 'S' : '') : stored;
+        // Tue/Thu/Fri, so her suspended Wednesday stays blank) — so a fully unconfigured week
+        // still shows the suspension at a glance. But once a real value is stored (F/H/S), it's
+        // always shown exactly as-is, never overwritten to 'S' — otherwise clicking through
+        // F -> H -> S during a suspended week would look like it does nothing, since every
+        // non-blank value would render identically. The blue ring marks "in suspension" instead,
+        // so that's visible without hiding what's actually stored. Cell is always click-cycleable.
+        const effective = stored || (suspended && weekPatternUnknown(student, weekMon) ? 'S' : '');
         const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
               onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] ?? '' }); }}
-              title={scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
-              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
+              title={suspended ? 'Holiday suspension' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''} ${suspended ? 'ring-2 ring-blue-300' : ''}`}>
               {effective || '·'}
             </button>
           </td>
@@ -2957,8 +2957,10 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
             {student.prepay.completed}/{student.prepay.weeks}w
           </div>
         )}
-        {student.invoiceNote && !student.prepay && (
-          <div className="text-xs mt-0.5 italic" style={{ color: 'var(--ink-faint)' }}>{student.invoiceNote}</div>
+        {!student.prepay && (
+          <div className="mt-0.5">
+            <EditableCell value={student.invoiceNote} onSave={v => onUpdate(student.id, { invoiceNote: v })} placeholder="— add note" className="italic" faint />
+          </div>
         )}
       </td>
       <td className="px-2 py-2 text-xs">
