@@ -813,11 +813,15 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
   const rows = students.map((s, i) => {
     // Same rule as the on-screen grid: a suspended day prints as 'S' only if the child has a real
     // underlying attendance value for that day; a blank (unknown/non-attendance) day stays blank.
+    // Exception: AUTO_BLANK_ON_SUSPENSION_END_NAMES students always print 'S' on every day of an
+    // active suspension, known or not.
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
       const stored = dayValueForDate(s, day, iso);
-      return suspended ? (stored ? 'S' : '') : stored;
+      return suspended
+        ? (AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(s.name) ? 'S' : (stored ? 'S' : ''))
+        : stored;
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
@@ -2968,7 +2972,11 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         // Clicking still cycles the real stored value completely silently either way — the box
         // never reveals the letter to "prove" the click worked; a brief flash is the only
         // confirmation. Do not default an unknown/blank day to 'S' under any circumstance.
-        const effective = suspended ? (stored ? 'S' : '') : stored;
+        // Exception: AUTO_BLANK_ON_SUSPENSION_END_NAMES students always show 'S' on every day of
+        // an active suspension, known or not — explicitly requested for this named list only.
+        const effective = suspended
+          ? (AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(student.name) ? 'S' : (stored ? 'S' : ''))
+          : stored;
         const locked = !!scheduleChange;
         const cellKey = `${student.id}:${day}`;
         return (
