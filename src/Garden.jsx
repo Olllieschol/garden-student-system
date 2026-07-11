@@ -713,16 +713,6 @@ function dayValueForDate(student, day, dateIso) {
   return change ? (change[day] || '') : (student[day] || '');
 }
 
-// A suspension should only hide 'S' on a blank day when that blank is *known* non-attendance
-// (i.e. at least one other weekday that week is set, so the blank one is deliberately empty —
-// e.g. a child who only attends Tue/Thu/Fri). If every weekday is blank, the pattern simply
-// hasn't been entered yet — there's no evidence the child doesn't attend, so a real dated
-// suspension should still show 'S' across the week rather than disappearing entirely.
-function weekPatternUnknown(student, weekMon) {
-  if (!weekMon) return false;
-  return ['mon', 'tue', 'wed', 'thu', 'fri'].every((day, di) => !dayValueForDate(student, day, isoAddDays(weekMon, di)));
-}
-
 function shortDate(d) {
   if (!d || d === 'tbc') return d || '–';
   let dt = new Date(d);
@@ -781,14 +771,13 @@ function DietaryBox({ value, onClick, className = 'w-5 h-5' }) {
 function openPrintableAttendance({ className, ageRange, weekLabel, students, weekMon }) {
   const dayIso = (di) => weekMon ? isoAddDays(weekMon, di) : null;
   const rows = students.map((s, i) => {
-    // Same rule as the on-screen grid: a suspended day prints as 'S', including over a normal
-    // F/H attendance day — a blank day only stays blank if it's known non-attendance (some other
-    // day that week is set); an entirely unconfigured week defaults to 'S' during a suspension.
+    // Same rule as the on-screen grid: a suspended day always prints as 'S' — no exceptions,
+    // regardless of what's actually stored underneath.
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
       const stored = dayValueForDate(s, day, iso);
-      return suspended ? ((stored || weekPatternUnknown(s, weekMon)) ? 'S' : '') : stored;
+      return suspended ? 'S' : stored;
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
@@ -2803,16 +2792,10 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
   // look like it used up the whole yearly allowance.
   const susCount = student.suspensions?.length || 0;
 
-  // Frozen at first render for this (student, week) pair — deliberately NOT recomputed as the
-  // student's day values change within the same view. Without freezing this, clicking a single
-  // day cell on a fully-blank student (e.g. filling in Monday for the first time) would
-  // instantly flip every OTHER day from "unknown pattern, default to S" to "known non-attendance,
-  // stay blank" — because the moment Monday gets a real value, the week is no longer entirely
-  // blank. That made one click appear to "randomly remove the rest of the week". Freezing this
-  // per (student, week) means mid-session edits don't retroactively reinterpret sibling cells;
-  // it only re-evaluates on a fresh load or when switching weeks/students.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const patternWasUnknown = useMemo(() => weekPatternUnknown(student, weekMon), [student.id, weekMon]);
+  // Which day cell (if any) just registered a click while suspended — briefly flashed as the
+  // only confirmation a click landed, since the box itself always shows 'S' while suspended and
+  // must never change to prove it (see the day-cell map below).
+  const [flashDay, setFlashDay] = useState(null);
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [menuPos, setMenuPos] = useState(null);
@@ -2917,20 +2900,28 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // A blank, unconfigured day defaults to 'S' during a suspension (frozen patternWasUnknown,
-        // above, so filling in one day doesn't retroactively flip sibling days). A blank *known*
-        // non-attendance day (some other day that week is set, e.g. Althea only attends
-        // Tue/Thu/Fri) stays blank. Once a real value is stored, it's always shown exactly as-is
-        // — never overwritten to 'S' — so clicking through F -> H -> S -> blank is visible on
-        // every click, including during a suspended week.
-        const effective = stored || (suspended && patternWasUnknown ? 'S' : '');
+        // PERMANENT RULE: while a day falls inside a Holiday Suspension, the box always shows a
+        // plain 'S' — never the underlying F/H letter, never blank, no exceptions. Clicking still
+        // cycles the real stored value (used once the suspension ends) completely silently — the
+        // box never changes away from 'S' to prove it. A brief flash on the box is the only click
+        // confirmation, so staff can tell the click landed without the display ever deviating
+        // from 'S'. Do not reintroduce any letter-showing or blank-showing exception here.
+        const effective = suspended ? 'S' : stored;
         const locked = !!scheduleChange;
+        const cellKey = `${student.id}:${day}`;
         return (
           <td key={day} className="px-1 py-2 text-center">
             <button
-              onClick={() => { if (!locked) onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] ?? '' }); }}
-              title={scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
-              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''}`}>
+              onClick={() => {
+                if (locked) return;
+                onUpdate(student.id, { [day]: { '': 'F', 'F': 'H', 'H': 'S', 'S': '' }[stored] ?? '' });
+                if (suspended) {
+                  setFlashDay(cellKey);
+                  setTimeout(() => setFlashDay(f => (f === cellKey ? null : f)), 300);
+                }
+              }}
+              title={suspended ? 'Holiday suspension — click cycles the underlying value silently' : scheduleChange ? `Scheduled change from ${shortDate(scheduleChange.effectiveDate)} — edit in Schedule changes` : undefined}
+              className={`w-7 h-7 rounded text-xs font-mono font-medium transition ${effective === 'F' ? 'bg-emerald-100 text-emerald-900' : effective === 'H' ? 'bg-amber-100 text-amber-900' : effective === 'S' ? 'bg-blue-100 text-blue-700' : 'text-stone-300 hover:bg-stone-100'} ${locked ? 'cursor-default' : ''} ${flashDay === cellKey ? 'ring-2 ring-emerald-400' : ''}`}>
               {effective || '·'}
             </button>
           </td>
