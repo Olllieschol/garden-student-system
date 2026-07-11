@@ -2917,14 +2917,13 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // A day inside a dated Holiday Suspension always shows a plain 'S' — including over a
-        // normal F/H attendance day — so a suspended week is unmistakable at a glance. A blank
-        // day only stays blank during a suspension if it's *known* non-attendance (some other
-        // day that week is set, e.g. Althea only attends Tue/Thu/Fri, so her suspended Wednesday
-        // stays blank); a fully unconfigured week defaults to 'S'. "Unconfigured" is frozen at
-        // first render (patternWasUnknown, above) rather than recomputed live, so filling in one
-        // day doesn't instantly flip every other blank day's interpretation mid-session.
-        const effective = suspended ? ((stored || patternWasUnknown) ? 'S' : '') : stored;
+        // A blank, unconfigured day defaults to 'S' during a suspension (frozen patternWasUnknown,
+        // above, so filling in one day doesn't retroactively flip sibling days). A blank *known*
+        // non-attendance day (some other day that week is set, e.g. Althea only attends
+        // Tue/Thu/Fri) stays blank. Once a real value is stored, it's always shown exactly as-is
+        // — never overwritten to 'S' — so clicking through F -> H -> S -> blank is visible on
+        // every click, including during a suspended week.
+        const effective = stored || (suspended && patternWasUnknown ? 'S' : '');
         const locked = !!scheduleChange;
         return (
           <td key={day} className="px-1 py-2 text-center">
