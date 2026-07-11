@@ -674,6 +674,46 @@ function migrateHolidaySuspensionNotes(students) {
   return { students: updated, migrationLog };
 }
 
+// Explicit, named allowlist — NOT a general rule. The user identified these 7 students by name
+// from their own Excel occupancy sheet (the ones shown with an orange "on holiday suspension"
+// box) and was explicit that auto-blanking the weekly pattern on suspension-end must apply ONLY
+// to these named children, never to any other student now or in future. Do not generalize this
+// into a rule keyed on "has a suspension" — that was tried and explicitly rejected.
+const AUTO_BLANK_ON_SUSPENSION_END_NAMES = [
+  'Linn Grietje Voerman', 'Riley Catalina Manguino', 'Bernat Batara Sandor',
+  'Carter Hendricks Manguino', 'Kai Donoso Ave', 'Noor Elisanne Voerman', 'Bayu Haven Wynn',
+];
+
+// Once a Holiday Suspension's end date has passed, the child's weekly F/H pattern is wiped
+// to blank so staff re-enter it fresh rather than the old pre-suspension pattern silently
+// carrying on. Each suspension entry gets a `daysCleared` flag so this only ever fires once
+// per suspension. Only applies to AUTO_BLANK_ON_SUSPENSION_END_NAMES (see above) — everyone
+// else's suspensions are left completely untouched by this function.
+function clearExpiredSuspensionDays(students, todayIso) {
+  const cleared = [];
+  const updated = students.map(s => {
+    if (!AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(s.name)) return s;
+    const susp = s.suspensions || [];
+    if (susp.length === 0) return s;
+    let daysWiped = false;
+    const nextSusp = susp.map(entry => {
+      if (entry.end >= todayIso) return entry; // still active or in the future — leave alone
+      if (entry.daysCleared) return entry; // already handled
+      if (entry.daysCleared === undefined) return { ...entry, daysCleared: true }; // grandfather, no wipe
+      daysWiped = true;
+      return { ...entry, daysCleared: true };
+    });
+    const suspChanged = nextSusp.some((e, i) => e !== susp[i]);
+    if (!suspChanged) return s;
+    const next = daysWiped
+      ? { ...s, suspensions: nextSusp, mon: '', tue: '', wed: '', thu: '', fri: '' }
+      : { ...s, suspensions: nextSusp };
+    if (daysWiped) cleared.push(s.name);
+    return next;
+  });
+  return { students: updated, cleared };
+}
+
 // Guards against free-text values landing in date fields (e.g. an imported "Started" or
 // "Last Date" cell reading "Monday 18th", "tbc", "ASAP", "–") being compared as if they were
 // real ISO dates. String comparison on non-ISO text is unpredictable — e.g. "Monday 18th" >
@@ -1406,10 +1446,15 @@ function GardenApp({ initialCentre = 'canggu' }) {
         return out;
       });
 
-      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated) && supabase) {
+      const { students: expiredCleared, cleared: expiredClearedNames } = clearExpiredSuspensionDays(backfilledStudents, todayIso);
+
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated || expiredClearedNames.length > 0) && supabase) {
         // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill,
-        // lunch/socialMedia tri-state migration) back to DB
-        await supabase.from('students').upsert(backfilledStudents.map(s => ({ id: String(s.id), data: s })));
+        // lunch/socialMedia tri-state migration, expired-suspension day clearing) back to DB
+        await supabase.from('students').upsert(expiredCleared.map(s => ({ id: String(s.id), data: s })));
+      }
+      if (expiredClearedNames.length > 0) {
+        console.info('[HS Expiry] Cleared weekly pattern for ended suspensions:', expiredClearedNames);
       }
       if (migrationLog.length > 0) {
         const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
@@ -1421,7 +1466,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
         if (!migrated.length && !deduped.length && !unparsed.length) console.info('[HS Migration] All clean — nothing to fix.');
       }
 
-      setStudents(backfilledStudents);
+      setStudents(expiredCleared);
       setClasses(sortClasses(dbClasses));
       setDbLoading(false);
     }
@@ -1996,6 +2041,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
               onUpdate={updateStudent}
               onArchive={archiveStudent}
               onRestore={restoreStudent}
+              showToast={showToast}
             />
           )}
         </div>
@@ -2708,7 +2754,7 @@ function ScheduleChangeSection({ student, onUpdate }) {
   );
 }
 
-function SuspensionSection({ student, onUpdate }) {
+function SuspensionSection({ student, onUpdate, showToast }) {
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
   const [start, setStart] = useState('');
@@ -2720,15 +2766,30 @@ function SuspensionSection({ student, onUpdate }) {
   const cancel = () => { setAdding(false); setEditIdx(null); setStart(''); setEnd(''); };
   const save = () => {
     if (!start || !end || end < start) return;
+    // Every add/edit resets daysCleared: false so the load-time sweep (clearExpiredSuspensionDays)
+    // knows to wipe the weekly pattern once this specific entry's end date passes — a freshly
+    // entered range is never grandfathered, only suspensions that predate this feature are.
+    const entry = { start, end, daysCleared: false };
     const updated = editIdx !== null
-      ? susp.map((s, i) => i === editIdx ? { start, end } : s)
-      : [...susp, { start, end }];
-    onUpdate({ suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) });
+      ? susp.map((s, i) => i === editIdx ? entry : s)
+      : [...susp, entry];
+    const todayIso = localIso(new Date());
+    const alreadyEnded = end < todayIso && AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(student.name);
+    const patch = { suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) };
+    if (alreadyEnded) {
+      // Logging a suspension that's already over — blank the pattern immediately rather than
+      // waiting for the next app load, and mark it cleared so the sweep doesn't touch it again.
+      patch.suspensions = updated.map(s => s === entry ? { ...entry, daysCleared: true } : s);
+      patch.mon = ''; patch.tue = ''; patch.wed = ''; patch.thu = ''; patch.fri = '';
+    }
+    onUpdate(patch);
+    showToast?.('Holiday suspension saved — attendance grid updated');
     cancel();
   };
   const del = (i) => {
     const updated = susp.filter((_, idx) => idx !== i);
     onUpdate({ suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) });
+    showToast?.('Holiday suspension removed — attendance grid updated');
   };
 
   return (
@@ -2767,7 +2828,7 @@ function SuspensionSection({ student, onUpdate }) {
           </div>
           <div className="flex gap-2">
             <button onClick={save} disabled={!start || !end || end < start} className="flex-1 py-1.5 rounded text-xs text-white font-medium disabled:opacity-40" style={{ background: 'var(--accent)' }}>
-              {editIdx !== null ? 'Save changes' : 'Add'}
+              Save changes
             </button>
             <button onClick={cancel} className="px-3 py-1.5 rounded text-xs border" style={{ borderColor: 'var(--line)' }}>Cancel</button>
           </div>
@@ -3162,7 +3223,7 @@ function MoveClassSection({ student, onUpdate }) {
 // STUDENT DETAIL PANEL
 // ============================================================
 
-function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }) {
+function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore, showToast }) {
   const { classes } = useClasses();
   const [confirmArchive, setConfirmArchive] = useState(false);
   React.useEffect(() => { setConfirmArchive(false); }, [student?.id]);
@@ -3253,7 +3314,7 @@ function StudentDetailPanel({ student, onClose, onUpdate, onArchive, onRestore }
           </div>
         </Section>
         <ScheduleChangeSection student={student} onUpdate={u} />
-        <SuspensionSection student={student} onUpdate={u} />
+        <SuspensionSection student={student} onUpdate={u} showToast={showToast} />
         <Section title="Billing">
           <EditableRow label="Bond paid" value={student.bondPaid} onSave={v => u({ bondPaid: v })} type="date" display={student.bondPaid ? shortDate(student.bondPaid) : ''} />
           <EditableRow label="Bond returned" value={student.bondReturned} onSave={v => u({ bondReturned: v })} display={student.bondReturned ? shortDate(student.bondReturned) : ''} />
