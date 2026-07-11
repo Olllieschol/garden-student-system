@@ -2011,6 +2011,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
                 onGoToInquiries={() => setView('inquiries')}
                 onUpdateClass={updateClass}
                 onExportAll={handleExportAll}
+                showToast={showToast}
               />
             )}
             {view === 'dashboard' && <DashboardView students={students.filter(s => s.centre === centre && !s.archived)} onJump={(cid) => { setCurrentClassId(cid); setView('class'); }} onExportAll={handleExportAll} />}
@@ -2153,7 +2154,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
 // CLASS VIEW (the meaty one)
 // ============================================================
 
-function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, onExportAll }) {
+function ClassView({ currentClass, students, incomingStudents = [], weekIdx, setWeekIdx, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, onImport, onGoToInquiries, onUpdateClass, onExportAll, showToast }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeStatusFilters, setActiveStatusFilters] = useState([]);
   const currentTabRef = useRef(null);
@@ -2355,7 +2356,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
       </div>
 
       {/* The spreadsheet — horizontally scrollable with synced top scrollbar */}
-      <SpreadsheetWithTopScroll active={active} incoming={filteredIncoming} waitlist={waitlist} left={left} totals={totals} students={filteredStudents} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} />
+      <SpreadsheetWithTopScroll active={active} incoming={filteredIncoming} waitlist={waitlist} left={left} totals={totals} students={filteredStudents} weekMon={WEEKS[weekIdx]?.monDate} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showLeft={showLeft} setShowLeft={setShowLeft} showToast={showToast} />
 
       <div className="mt-4 text-xs flex items-center gap-2" style={{ color: 'var(--ink-faint)' }}>
         <Edit3 size={11} /> Click any cell to edit. Day cells cycle F → H → S → empty. Status cycles workflow. Scroll table sideways for more columns.
@@ -2364,7 +2365,7 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   );
 }
 
-function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft }) {
+function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, totals, students, weekMon, onCycleDay, onUpdate, onSelectStudent, showLeft, setShowLeft, showToast }) {
   const topRef = useRef(null);
   const bottomRef = useRef(null);
   const [contentWidth, setContentWidth] = useState(1900);
@@ -2486,7 +2487,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
               {/* ACTIVE (includes incoming students who have no date or whose date has arrived) — alphabetical by name */}
               <SectionDivider label="Active" count={activeAndIncoming.length} colour="var(--accent)" />
               {activeAndIncoming.map((s, idx) => (
-                <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} />
+                <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showToast={showToast} />
               ))}
               {/* Totals */}
               <tr className="border-t border-b font-medium text-xs" style={{ borderColor: 'var(--line)', background: 'var(--accent-soft)' }}>
@@ -2509,7 +2510,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <>
                   <SectionDivider label="Transitioning in" count={incomingPending.length} colour="#2563eb" />
                   {incomingPending.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showToast={showToast} dimmed />
                   ))}
                 </>
               )}
@@ -2519,7 +2520,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                 <>
                   <SectionDivider label="Waitlist / Pipeline" count={waitlist.length} colour="var(--terracotta)" />
                   {waitlist.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showToast={showToast} dimmed />
                   ))}
                 </>
               )}
@@ -2537,7 +2538,7 @@ function SpreadsheetWithTopScroll({ active, incoming = [], waitlist, left, total
                     </td>
                   </tr>
                   {showLeft && left.map((s, idx) => (
-                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} dimmed />
+                    <StudentRow key={s.id} student={s} idx={idx} weekMon={weekMon} onCycleDay={onCycleDay} onUpdate={onUpdate} onSelectStudent={onSelectStudent} showToast={showToast} dimmed />
                   ))}
                 </>
               )}
@@ -2758,7 +2759,12 @@ function ScheduleChangeSection({ student, onUpdate }) {
   );
 }
 
-function SuspensionSection({ student, onUpdate, showToast }) {
+// Shared structured Start/End date-range editor for a student's Holiday Suspensions — the list
+// of existing ranges (editable/deletable) plus an add/edit form with a "Save changes" button.
+// Used both in the sidebar (SuspensionSection, wrapped in a <Section>) and inline in the main
+// table's Holiday Suspension column (HolidaySuspensionCell) so both entry points give the exact
+// same structured editor rather than the table cell falling back to free-text typing.
+function SuspensionEditorBody({ student, onUpdate, showToast }) {
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
   const [start, setStart] = useState('');
@@ -2797,7 +2803,7 @@ function SuspensionSection({ student, onUpdate, showToast }) {
   };
 
   return (
-    <Section title={`Holiday suspensions  ${susp.length}/4`}>
+    <>
       {susp.map((s, i) => (
         <div key={i} className="text-xs py-1.5 border-b last:border-0 flex items-center justify-between gap-2" style={{ color: 'var(--ink-soft)', borderColor: 'var(--line-soft)' }}>
           <span><span className="font-mono mr-2 opacity-60">{i+1}.</span>{shortDate(s.start)} – {shortDate(s.end)}</span>
@@ -2842,12 +2848,49 @@ function SuspensionSection({ student, onUpdate, showToast }) {
           <Plus size={11} /> Add suspension
         </button>
       )}
+    </>
+  );
+}
+
+function SuspensionSection({ student, onUpdate, showToast }) {
+  const susp = student.suspensions || [];
+  return (
+    <Section title={`Holiday suspensions  ${susp.length}/4`}>
+      <SuspensionEditorBody student={student} onUpdate={onUpdate} showToast={showToast} />
     </Section>
   );
 }
 
+// Inline version of the same structured editor for the main table's Holiday Suspension column —
+// clicking the cell opens the real Start/End date-range form (matching the sidebar panel)
+// instead of falling back to typing free text into an EditableCell.
+function HolidaySuspensionCell({ student, onUpdate, showToast }) {
+  const [open, setOpen] = useState(false);
+  const susp = student.suspensions || [];
 
-function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStudent, dimmed }) {
+  if (open) {
+    return (
+      <div className="text-xs" style={{ minWidth: '200px' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-medium" style={{ color: 'var(--ink-soft)' }}>{susp.length}/4</span>
+          <button onClick={() => setOpen(false)} className="p-0.5 rounded hover:bg-stone-100 transition" title="Close"><X size={11} /></button>
+        </div>
+        <SuspensionEditorBody student={student} onUpdate={onUpdate} showToast={showToast} />
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setOpen(true)} className="text-xs text-left w-full hover:underline">
+      {susp.length === 0
+        ? <span className="italic" style={{ color: 'var(--ink-faint)' }}>— add</span>
+        : susp.map((s, i) => <div key={i} style={{ color: 'var(--ink-soft)' }}>{i + 1}. {shortDate(s.start)} – {shortDate(s.end)}</div>)}
+    </button>
+  );
+}
+
+
+function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStudent, dimmed, showToast }) {
   const { classes } = useClasses();
   const status = STATUSES[student.status];
   const inv = INVOICE_STATUSES[student.invoiceStatus] || INVOICE_STATUSES.not_sent;
@@ -3041,7 +3084,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         <EditableCell value={student.note} onSave={v => onUpdate(student.id, { note: v })} placeholder="— add note" multiline />
       </td>
       <td className="px-2 py-2 text-xs" style={{ minWidth: '160px' }}>
-        <EditableCell value={student.holidaySuspension} onSave={v => onUpdate(student.id, { holidaySuspension: v })} placeholder="— add" multiline />
+        <HolidaySuspensionCell student={student} onUpdate={patch => onUpdate(student.id, patch)} showToast={showToast} />
       </td>
       <td className="px-2 py-2 text-xs">
         <TransitionCell student={student} onUpdate={onUpdate} />
