@@ -771,13 +771,13 @@ function DietaryBox({ value, onClick, className = 'w-5 h-5' }) {
 function openPrintableAttendance({ className, ageRange, weekLabel, students, weekMon }) {
   const dayIso = (di) => weekMon ? isoAddDays(weekMon, di) : null;
   const rows = students.map((s, i) => {
-    // Same rule as the on-screen grid: a suspended day always prints as 'S' — no exceptions,
-    // regardless of what's actually stored underneath.
+    // Same rule as the on-screen grid: a suspended day prints as 'S' only if the child has a real
+    // underlying attendance value for that day; a blank (unknown/non-attendance) day stays blank.
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
       const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
       const stored = dayValueForDate(s, day, iso);
-      return suspended ? 'S' : stored;
+      return suspended ? (stored ? 'S' : '') : stored;
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
@@ -2900,13 +2900,14 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
-        // PERMANENT RULE: while a day falls inside a Holiday Suspension, the box always shows a
-        // plain 'S' — never the underlying F/H letter, never blank, no exceptions. Clicking still
-        // cycles the real stored value (used once the suspension ends) completely silently — the
-        // box never changes away from 'S' to prove it. A brief flash on the box is the only click
-        // confirmation, so staff can tell the click landed without the display ever deviating
-        // from 'S'. Do not reintroduce any letter-showing or blank-showing exception here.
-        const effective = suspended ? 'S' : stored;
+        // While a day falls inside a Holiday Suspension: if the child has a real underlying F/H/S
+        // value for that day (a known attendance day), the box always shows a plain 'S' — never
+        // the actual letter. If the underlying value is blank (no known attendance that day), the
+        // box stays blank — a suspension never invents an attendance day that wasn't there.
+        // Clicking still cycles the real stored value completely silently either way — the box
+        // never reveals the letter to "prove" the click worked; a brief flash is the only
+        // confirmation. Do not default an unknown/blank day to 'S' under any circumstance.
+        const effective = suspended ? (stored ? 'S' : '') : stored;
         const locked = !!scheduleChange;
         const cellKey = `${student.id}:${day}`;
         return (
