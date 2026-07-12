@@ -2764,7 +2764,7 @@ function ScheduleChangeSection({ student, onUpdate }) {
 // Used both in the sidebar (SuspensionSection, wrapped in a <Section>) and inline in the main
 // table's Holiday Suspension column (HolidaySuspensionCell) so both entry points give the exact
 // same structured editor rather than the table cell falling back to free-text typing.
-function SuspensionEditorBody({ student, onUpdate, showToast }) {
+function SuspensionEditorBody({ student, onUpdate, showToast, onSaved }) {
   const [adding, setAdding] = useState(false);
   const [editIdx, setEditIdx] = useState(null);
   const [start, setStart] = useState('');
@@ -2795,11 +2795,13 @@ function SuspensionEditorBody({ student, onUpdate, showToast }) {
     onUpdate(patch);
     showToast?.('Holiday suspension saved — attendance grid updated');
     cancel();
+    onSaved?.();
   };
   const del = (i) => {
     const updated = susp.filter((_, idx) => idx !== i);
     onUpdate({ suspensions: updated, holidaySuspension: formatSuspensionsNote(updated) });
     showToast?.('Holiday suspension removed — attendance grid updated');
+    onSaved?.();
   };
 
   return (
@@ -2875,7 +2877,7 @@ function HolidaySuspensionCell({ student, onUpdate, showToast }) {
           <span className="font-medium" style={{ color: 'var(--ink-soft)' }}>{susp.length}/4</span>
           <button onClick={() => setOpen(false)} className="p-0.5 rounded hover:bg-stone-100 transition" title="Close"><X size={11} /></button>
         </div>
-        <SuspensionEditorBody student={student} onUpdate={onUpdate} showToast={showToast} />
+        <SuspensionEditorBody student={student} onUpdate={onUpdate} showToast={showToast} onSaved={() => setOpen(false)} />
       </div>
     );
   }
