@@ -674,14 +674,21 @@ function migrateHolidaySuspensionNotes(students) {
   return { students: updated, migrationLog };
 }
 
-// Explicit, named allowlist — NOT a general rule. The user identified these 7 students by name
-// from their own Excel occupancy sheet (the ones shown with an orange "on holiday suspension"
-// box) and was explicit that auto-blanking the weekly pattern on suspension-end must apply ONLY
-// to these named children, never to any other student now or in future. Do not generalize this
-// into a rule keyed on "has a suspension" — that was tried and explicitly rejected.
+// Explicit, named allowlist — NOT a general rule. The user identified these students by name
+// (first the Sanur 7 from their Excel occupancy sheet, later an 18-name Canggu batch) and was
+// explicit that both (a) forcing S on every day of an active suspension regardless of known
+// values, and (b) auto-blanking the weekly pattern once the suspension ends, must apply ONLY to
+// these named children, never to any other student now or in future. Do not generalize this into
+// a rule keyed on "has a suspension" — that was tried and explicitly rejected.
 const AUTO_BLANK_ON_SUSPENSION_END_NAMES = [
+  // Sanur
   'Linn Grietje Voerman', 'Riley Catalina Manguino', 'Bernat Batara Sandor',
   'Carter Hendricks Manguino', 'Kai Donoso Ave', 'Noor Elisanne Voerman', 'Bayu Haven Wynn',
+  // Canggu
+  'Isabella Yong', 'Poppy Meyer', 'Maya Landau', 'Massimo Golian', 'Astrid Clare Oak',
+  'Aurora te ao mārama Harris', 'Nina Revita Fiacco', 'Austin Frederick  Arthur Rabbidge',
+  'Kohaku Kanazawa', 'Vienna Valloe', 'Elio Holm', 'Kyla Ocean Hoehn', 'Jesse Vooderwind',
+  'Remi Martin', 'Dean (Dino) Ikhlas Paul De Mol', 'Elsie Clark', 'Sofia Dixon', 'Harvey Drury',
 ];
 
 // Once a Holiday Suspension's end date has passed, the child's weekly F/H pattern is wiped
