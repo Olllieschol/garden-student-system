@@ -832,7 +832,9 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     });
     const phone = escapeHtml(s.phone || '').replace(/\n/g, '<br>');
     const parents = escapeHtml(s.parents || '');
-    const note = [s.note, s.holidaySuspension].filter(Boolean).map(escapeHtml).join('<br>');
+    // Holiday suspension dates used to be appended here too, but staff already see suspension
+    // via the S day cells (see legend) — mixing the date-range text into Notes just cluttered it.
+    const note = escapeHtml(s.note || '');
     const genderColour = GENDER[s.gender]?.colour || GENDER.X.colour;
     return `
       <tr>
