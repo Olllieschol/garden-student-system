@@ -2936,7 +2936,14 @@ function HolidaySuspensionCell({ student, onUpdate, showToast }) {
 
 function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStudent, dimmed, showToast }) {
   const { classes } = useClasses();
-  const status = STATUSES[student.status];
+  // Mirrors ClassView's effectiveStatusForWeek: the real status field only flips from
+  // 'enrolled_pending' to 'enrolled' once the REAL calendar date reaches the Started date, but
+  // browsing forward to that student's start week should already show the "Enrolled" badge for
+  // that week, matching them already being listed in Active rather than Waitlist/Pipeline.
+  const weekFriForRow = weekMon ? isoAddDays(weekMon, 4) : null;
+  const displayStatusKey = (student.status === 'enrolled_pending' && weekFriForRow && isIsoDate(student.originalStart) && student.originalStart <= weekFriForRow)
+    ? 'enrolled' : student.status;
+  const status = STATUSES[displayStatusKey];
   const inv = INVOICE_STATUSES[student.invoiceStatus] || INVOICE_STATUSES.not_sent;
   // HS/yr counts how many separate suspension entries have been used this year (capped at 4),
   // matching the same count shown in the student panel's "Holiday suspensions X/4" and everywhere
