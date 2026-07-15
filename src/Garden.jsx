@@ -1321,8 +1321,27 @@ function GardenApp({ initialCentre = 'canggu' }) {
   const [dbLoading, setDbLoading] = useState(true);
   const [addClassOpen, setAddClassOpen] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
-  const [centre, setCentre] = useState(initialCentre);
-  const [centreUnlocked, setCentreUnlocked] = useState({ canggu: initialCentre === 'canggu', sanur: initialCentre === 'sanur' });
+  // Remember whichever centre the admin was actually viewing (and which centres they've already
+  // unlocked with a password) across a page refresh — previously this always reset to whichever
+  // centre the login gate happened to store, silently bouncing an admin who'd switched to Canggu
+  // back to Sanur on every reload even though they'd already unlocked both.
+  const [centre, setCentre] = useState(() => {
+    try {
+      const saved = localStorage.getItem('garden_active_centre');
+      return (saved === 'canggu' || saved === 'sanur') ? saved : initialCentre;
+    } catch { return initialCentre; }
+  });
+  const [centreUnlocked, setCentreUnlocked] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('garden_unlocked_centres') || 'null');
+      if (saved && typeof saved === 'object') {
+        return { canggu: !!saved.canggu || initialCentre === 'canggu', sanur: !!saved.sanur || initialCentre === 'sanur' };
+      }
+    } catch {}
+    return { canggu: initialCentre === 'canggu', sanur: initialCentre === 'sanur' };
+  });
+  useEffect(() => { try { localStorage.setItem('garden_active_centre', centre); } catch {} }, [centre]);
+  useEffect(() => { try { localStorage.setItem('garden_unlocked_centres', JSON.stringify(centreUnlocked)); } catch {} }, [centreUnlocked]);
   const [centreGateTarget, setCentreGateTarget] = useState(null); // which centre is being unlocked
   const [currentClassId, setCurrentClassId] = useState('el2d');
   // Classes with no `centre` (el1/jrk/kg) are shared by both centres; the rest are centre-specific
