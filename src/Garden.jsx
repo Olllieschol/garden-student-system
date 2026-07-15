@@ -2234,17 +2234,28 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   const filteredStudents = filterByStatus(students.filter(inWeek).filter(notYetTransitioned));
   const filteredIncoming = incomingStudents.filter(inWeek);
 
-  const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(s.status));
+  // A real status flip from 'enrolled_pending' to 'enrolled' only happens once the REAL calendar
+  // date reaches the Started date (see promoteEnrolledPendingStudents, run on load) — it does not
+  // change just because staff are browsing a future week here. But browsing forward to that future
+  // week should still preview them as active from that week on, the same way the day-cell grid
+  // already previews future weeks — otherwise a student due to start next month looks like they've
+  // vanished from every future week right up until someone happens to reload the app on the day.
+  const effectiveStatusForWeek = (s) =>
+    (s.status === 'enrolled_pending' && weekFriDate && isIsoDate(s.originalStart) && s.originalStart <= weekFriDate)
+      ? 'enrolled' : s.status;
+
+  const active = filteredStudents.filter(s => ['enrolled','suspended','extended_holiday'].includes(effectiveStatusForWeek(s)));
   // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so they don't have a
   // meaningful "active in this week" state — filtering them by inWeek hid anyone whose prospective
   // start date fell after the currently-viewed week, even though they belong in the pipeline list
-  // regardless of which week is selected.
+  // regardless of which week is selected. Once their effective status for the viewed week becomes
+  // 'enrolled' (see above), they move to `active` instead and are excluded here.
   // Auto-order the pipeline list by how close each student is to enrolling: Wait list first,
   // then Placement fee (already paid to hold a spot), then Invoice sent, then Quote sent, then
   // bare Inquiries.
   const PIPELINE_ORDER = { enrolled_pending: 0, wait_list: 1, placement_fee: 2, invoice_sent: 3, quote_sent: 4, inquiry: 5 };
   const waitlist = filterByStatus(students)
-    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee','enrolled_pending'].includes(s.status))
+    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee','enrolled_pending'].includes(s.status) && effectiveStatusForWeek(s) !== 'enrolled')
     .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status] || compareByName(a, b));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status)).sort(compareByName);
 
