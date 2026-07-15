@@ -95,6 +95,7 @@ const TODAY_WEEK_IDX = PAST_WEEKS; // index of the current week in WEEKS
 
 const STATUSES = {
   enrolled:          { label: 'Enrolled',          dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+  enrolled_pending:  { label: 'Enrolled — waiting for date', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
   inquiry:           { label: 'Inquiry',           dot: 'bg-slate-400',   chip: 'bg-slate-50 text-slate-700 border-slate-200' },
   quote_sent:        { label: 'Quote sent',        dot: 'bg-amber-500',   chip: 'bg-amber-50 text-amber-800 border-amber-200' },
   invoice_sent:      { label: 'Invoice sent',      dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-800 border-orange-200' },
@@ -719,6 +720,22 @@ function clearExpiredSuspensionDays(students, todayIso) {
     return next;
   });
   return { students: updated, cleared };
+}
+
+// A student marked "Enrolled — waiting for date" has already paid/secured a spot but hasn't
+// started yet, so they stay in the Waitlist/Pipeline section (green) until their start date
+// arrives. Once that date passes, they need to actually become 'enrolled' and move into the
+// active class list — this sweep does that automatically on load rather than relying on staff
+// to remember to flip the status by hand.
+function promoteEnrolledPendingStudents(students, todayIso) {
+  const promoted = [];
+  const updated = students.map(s => {
+    if (s.status !== 'enrolled_pending') return s;
+    if (!isIsoDate(s.originalStart) || s.originalStart > todayIso) return s;
+    promoted.push(s.name);
+    return { ...s, status: 'enrolled' };
+  });
+  return { students: updated, promoted };
 }
 
 // Guards against free-text values landing in date fields (e.g. an imported "Started" or
@@ -1460,14 +1477,19 @@ function GardenApp({ initialCentre = 'canggu' }) {
       });
 
       const { students: expiredCleared, cleared: expiredClearedNames } = clearExpiredSuspensionDays(backfilledStudents, todayIso);
+      const { students: pendingPromoted, promoted: promotedNames } = promoteEnrolledPendingStudents(expiredCleared, todayIso);
 
-      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated || expiredClearedNames.length > 0) && supabase) {
+      if ((changed.length > 0 || sanurClassIdsChanged || hsColumnBackfilled || triStateMigrated || expiredClearedNames.length > 0 || promotedNames.length > 0) && supabase) {
         // Persist migrated/deduped students (and any Sanur classId remap, HS column backfill,
-        // lunch/socialMedia tri-state migration, expired-suspension day clearing) back to DB
-        await supabase.from('students').upsert(expiredCleared.map(s => ({ id: String(s.id), data: s })));
+        // lunch/socialMedia tri-state migration, expired-suspension day clearing, enrolled_pending
+        // promotion) back to DB
+        await supabase.from('students').upsert(pendingPromoted.map(s => ({ id: String(s.id), data: s })));
       }
       if (expiredClearedNames.length > 0) {
         console.info('[HS Expiry] Cleared weekly pattern for ended suspensions:', expiredClearedNames);
+      }
+      if (promotedNames.length > 0) {
+        console.info('[Enrolled Pending] Auto-promoted to Enrolled on start date:', promotedNames);
       }
       if (migrationLog.length > 0) {
         const unparsed  = migrationLog.filter(l => l.status === 'unparsed');
@@ -1479,7 +1501,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
         if (!migrated.length && !deduped.length && !unparsed.length) console.info('[HS Migration] All clean — nothing to fix.');
       }
 
-      setStudents(expiredCleared);
+      setStudents(pendingPromoted);
       setClasses(sortClasses(dbClasses));
       setDbLoading(false);
     }
@@ -1536,7 +1558,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
   // Pipeline students (inquiry/quote/invoice/waitlist) haven't started yet, so an imported "Last Date" for them
   // isn't a meaningful "already left" signal — filtering them out by it wrongly hid a small number of waitlist
   // students (present correctly in Inquiries, which doesn't apply this filter) from their own class page.
-  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status) || !isIsoDate(s.lastDate) || s.lastDate >= todayIso));
+  const ownStudents   = students.filter(s => s.centre === centre && s.classId === currentClassId && !s.archived && !['left','cancelled'].includes(s.status) && (['inquiry','quote_sent','invoice_sent','wait_list','placement_fee','enrolled_pending'].includes(s.status) || !isIsoDate(s.lastDate) || s.lastDate >= todayIso));
   const incomingStudents = students.filter(s => s.centre === centre && s.transitionTo === currentClassId && !s.archived);
   const visibleStudents = [...ownStudents, ...incomingStudents.filter(s => s.classId !== currentClassId)];
 
@@ -1725,7 +1747,7 @@ function GardenApp({ initialCentre = 'canggu' }) {
     // relying on each caller to remember — guarantees a newly-enrolled/wait-listed student
     // never silently vanishes from ownStudents/isStudentActive due to a leftover past date.
     if (current && patch.status && patch.status !== current.status
-        && ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee'].includes(current.status)
+        && ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee', 'enrolled_pending'].includes(current.status)
         && ['enrolled', 'suspended'].includes(patch.status)
         && patch.lastDate === undefined) {
       patch = { ...patch, lastDate: '' };
@@ -2220,9 +2242,9 @@ function ClassView({ currentClass, students, incomingStudents = [], weekIdx, set
   // Auto-order the pipeline list by how close each student is to enrolling: Wait list first,
   // then Placement fee (already paid to hold a spot), then Invoice sent, then Quote sent, then
   // bare Inquiries.
-  const PIPELINE_ORDER = { wait_list: 0, placement_fee: 1, invoice_sent: 2, quote_sent: 3, inquiry: 4 };
+  const PIPELINE_ORDER = { enrolled_pending: 0, wait_list: 1, placement_fee: 2, invoice_sent: 3, quote_sent: 4, inquiry: 5 };
   const waitlist = filterByStatus(students)
-    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee'].includes(s.status))
+    .filter(s => ['inquiry','quote_sent','invoice_sent','wait_list','placement_fee','enrolled_pending'].includes(s.status))
     .sort((a, b) => PIPELINE_ORDER[a.status] - PIPELINE_ORDER[b.status] || compareByName(a, b));
   const left = filteredStudents.filter(s => ['left','cancelled'].includes(s.status)).sort(compareByName);
 
@@ -2925,8 +2947,8 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
     setStatusOpen(true);
   };
   // Pipeline students move between the pre-enrolment stages, not to/from suspension.
-  const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee'].includes(student.status);
-  const statusOptions = isPipeline ? ['wait_list', 'placement_fee', 'invoice_sent', 'quote_sent', 'enrolled'] : ['suspended', 'enrolled'];
+  const isPipeline = ['inquiry', 'quote_sent', 'invoice_sent', 'wait_list', 'placement_fee', 'enrolled_pending'].includes(student.status);
+  const statusOptions = isPipeline ? ['wait_list', 'placement_fee', 'invoice_sent', 'quote_sent', 'enrolled_pending', 'enrolled'] : ['suspended', 'enrolled'];
   const cycleInvoice = () => {
     const order = ['not_sent','sent','paid','prepay'];
     const i = order.indexOf(student.invoiceStatus || 'not_sent');
