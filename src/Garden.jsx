@@ -841,9 +841,11 @@ function openPrintableAttendance({ className, ageRange, weekLabel, students, wee
     // active suspension, known or not.
     const days = ['mon', 'tue', 'wed', 'thu', 'fri'].map((day, di) => {
       const iso = dayIso(di);
-      const suspended = iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
+      // A day before the child's Started date never happened — blank regardless of pattern.
+      const notYetStarted = iso && isIsoDate(s.originalStart) && iso < s.originalStart;
+      const suspended = !notYetStarted && iso && s.suspensions?.some(sus => sus.start <= iso && sus.end >= iso);
       const stored = dayValueForDate(s, day, iso);
-      return suspended
+      return notYetStarted ? '' : suspended
         ? (AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(s.name) ? 'S' : (stored ? 'S' : ''))
         : stored;
     });
@@ -3056,7 +3058,11 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
       </td>
       {['mon','tue','wed','thu','fri'].map((day, di) => {
         const dayIso = weekMon ? isoAddDays(weekMon, di) : null;
-        const suspended = dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
+        // A day before the child's actual Started date never happened — show blank regardless of
+        // their weekly pattern, even within their first week (e.g. starting Tuesday leaves Monday
+        // of that same week blank rather than showing their normal Monday pattern).
+        const notYetStarted = dayIso && isIsoDate(student.originalStart) && dayIso < student.originalStart;
+        const suspended = !notYetStarted && dayIso && student.suspensions?.some(s => s.start <= dayIso && s.end >= dayIso);
         const scheduleChange = dayIso ? scheduleChangeForDate(student, dayIso) : null;
         const stored = dayValueForDate(student, day, dayIso);
         // While a day falls inside a Holiday Suspension: if the child has a real underlying F/H/S
@@ -3068,7 +3074,7 @@ function StudentRow({ student, idx, weekMon, onCycleDay, onUpdate, onSelectStude
         // confirmation. Do not default an unknown/blank day to 'S' under any circumstance.
         // Exception: AUTO_BLANK_ON_SUSPENSION_END_NAMES students always show 'S' on every day of
         // an active suspension, known or not — explicitly requested for this named list only.
-        const effective = suspended
+        const effective = notYetStarted ? '' : suspended
           ? (AUTO_BLANK_ON_SUSPENSION_END_NAMES.includes(student.name) ? 'S' : (stored ? 'S' : ''))
           : stored;
         const locked = !!scheduleChange;
